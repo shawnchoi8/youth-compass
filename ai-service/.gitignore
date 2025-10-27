@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+
+# Virtual Environment
+venv/
+.venv/
+env/
+ENV/
+
+# Environment Variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+
+# Data (정책 문서는 용량이 클 수 있음)
+data/documents/*.pdf
+data/documents/*.docx
+data/documents/*.hwp
+
+# Vector DB
+chroma_db/
+*.db
+*.sqlite
+
+# Model cache
+models/
+.cache/
+
+# OS
+.DS_Store
+Thumbs.db
