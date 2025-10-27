@@ -1,0 +1,66 @@
+**ai-service/.dockerignore**
+```
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+
+# Virtual Environment
+venv/
+.venv/
+env/
+ENV/
+.virtualenv/
+
+# Environment Variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Logs
+*.log
+logs/
+
+# Data (정책 문서는 용량이 클 수 있음)
+data/documents/*.pdf
+data/documents/*.docx
+data/documents/*.hwp
+data/documents/*.txt
+
+# Vector DB
+chroma_db/
+*.db
+*.sqlite
+*.sqlite3
+
+# Model cache
+models/
+.cache/
+*.pkl
+*.pickle
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# OS
+Thumbs.db
+
+# Git
+.git/
+.gitignore
