@@ -1,0 +1,106 @@
+services:
+  # MySQL 데이터베이스
+  mysql:
+    image: mysql:8.0
+    container_name: youth-compass-db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-youth_compass}
+      MYSQL_USER: ${MYSQL_USER:-admin}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-adminpassword}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - youth-compass-network
+    healthcheck:
+      test: ["CMD", "sh", "-c", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Spring Boot 백엔드
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: youth-compass-backend
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-youth_compass}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-admin}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-adminpassword}
+      AI_SERVICE_URL: http://ai-service:8000
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - youth-compass-network
+    restart: unless-stopped
+
+  # ChromaDB Vector Database
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: youth-compass-chromadb
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma-data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    networks:
+      - youth-compass-network
+    restart: unless-stopped
+
+  # AI 서비스 (FastAPI)
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: youth-compass-ai
+    ports:
+      - "8000:8000"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-admin}:${MYSQL_PASSWORD:-adminpassword}@mysql:3306/${MYSQL_DATABASE:-youth_compass}
+      BACKEND_URL: http://backend:8080
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: 8000
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    volumes:
+      - ./ai-service/data/documents:/app/data/documents
+    depends_on:
+      - chromadb
+    networks:
+      - youth-compass-network
+    restart: unless-stopped
+
+  # 프론트엔드 (React + Nginx)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: youth-compass-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+      - ai-service
+    networks:
+      - youth-compass-network
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+    name: youth-compass-mysql-data
+  chroma-data:
+    name: youth-compass-chroma-data
+
+networks:
+  youth-compass-network:
+    name: youth-compass-network
+    driver: bridge
