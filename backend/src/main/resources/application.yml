@@ -1,1 +1,36 @@
-spring.application.name=youth-compass-backend
+spring:
+  application:
+    name: youth-compass-backend
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/youth_compass?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul}
+    username: ${SPRING_DATASOURCE_USERNAME:admin}
+    password: ${SPRING_DATASOURCE_PASSWORD:adminpassword}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQL8Dialect
+    open-in-view: false
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+# AI Service URL
+ai:
+  service:
+    url: ${AI_SERVICE_URL:http://localhost:8000}
+
+# Logging
+logging:
+  level:
+    com.youthcompass: DEBUG
+    org.springframework: INFO
+    org.hibernate: INFO
