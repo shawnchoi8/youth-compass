@@ -3,12 +3,24 @@ FROM node:18-alpine AS build
 
 WORKDIR /app
 
-# 의존성 파일 복사 및 설치
+# copy and install dependency file
 COPY package*.json ./
 RUN npm ci
 
-# 소스 코드 복사 및 빌드
+# 소스 코드 복사
 COPY . .
+
+# 빌드 인자로 환경 변수 받기
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_PUBLISHABLE_KEY
+ARG VITE_SUPABASE_PROJECT_ID
+
+# 환경 변수로 설정
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+ENV VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY
+ENV VITE_SUPABASE_PROJECT_ID=$VITE_SUPABASE_PROJECT_ID
+
+# 빌드
 RUN npm run build
 
 # 실행 단계 - Nginx로 서빙
