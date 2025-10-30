@@ -13,35 +13,47 @@ const Header = () => {
 
   useEffect(() => {
     // Check current session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchUserName(session.user.id);
-      }
-    });
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          fetchUserName(session.user.id);
+        }
+      })
+      .catch((error) => {
+        console.warn('Supabase auth not available:', error);
+      });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchUserName(session.user.id);
-      } else {
-        setUserName("");
-      }
-    });
+    try {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          fetchUserName(session.user.id);
+        } else {
+          setUserName("");
+        }
+      });
 
-    return () => subscription.unsubscribe();
+      return () => subscription.unsubscribe();
+    } catch (error) {
+      console.warn('Supabase auth listener not available:', error);
+    }
   }, []);
 
   const fetchUserName = async (userId: string) => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("name")
-      .eq("user_id", userId)
-      .single();
-    
-    if (data) {
-      setUserName(data.name);
+    try {
+      const { data } = await supabase
+        .from("profiles")
+        .select("name")
+        .eq("user_id", userId)
+        .single();
+
+      if (data) {
+        setUserName(data.name);
+      }
+    } catch (error) {
+      console.warn('Could not fetch user name:', error);
     }
   };
 
