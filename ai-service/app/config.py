@@ -6,7 +6,9 @@ class Settings(BaseSettings):
     """애플리케이션 설정"""
     
     # API Keys
-    openai_api_key: str
+    openai_api_key: Optional[str] = None
+    upstage_api_key: Optional[str] = None
+    tavily_api_key: Optional[str] = None
     
     # Database
     database_url: Optional[str] = None
@@ -14,13 +16,26 @@ class Settings(BaseSettings):
     # Backend
     backend_url: str = "http://backend:8080"
     
+    # ChromaDB
+    chroma_host: str = "chromadb"
+    chroma_port: int = 8000
+    
     # Environment
     environment: str = "development"
     
-    # Model Settings
-    model_name: str = "gpt-4o-mini"
-    temperature: float = 0.7
+    # Model Settings (Upstage Solar)
+    upstage_model: str = "solar-mini"
+    upstage_embedding_model: str = "solar-embedding-1-large"
+    temperature: float = 0
     max_tokens: int = 1000
+    
+    # Vector Store Settings
+    vector_chunk_size: int = 1000
+    vector_chunk_overlap: int = 200
+    vector_search_k: int = 4
+    
+    # Document Path
+    documents_path: str = "/app/data/documents"
     
     class Config:
         env_file = ".env"

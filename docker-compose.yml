@@ -65,6 +65,8 @@ services:
     ports:
       - "8000:8000"
     environment:
+      UPSTAGE_API_KEY: ${UPSTAGE_API_KEY}
+      TAVILY_API_KEY: ${TAVILY_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       DATABASE_URL: mysql+pymysql://${MYSQL_USER:-admin}:${MYSQL_PASSWORD:-adminpassword}@mysql:3306/${MYSQL_DATABASE:-youth_compass}
       BACKEND_URL: http://backend:8080
