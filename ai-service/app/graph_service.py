@@ -245,8 +245,12 @@ class GraphService:
             chat_history = ""
             messages = state.get("messages", [])
             if messages:
-                for role, content in messages[-6:]:  # 최근 3턴
-                    chat_history += f"{role}: {content}\n"
+                for msg in messages[-6:]:  # 최근 3턴
+                    if isinstance(msg, tuple) and len(msg) == 2:
+                        role, content = msg
+                        chat_history += f"{role}: {content}\n"
+                    elif hasattr(msg, 'type') and hasattr(msg, 'content'):
+                        chat_history += f"{msg.type}: {msg.content}\n"
             
             # 답변 생성
             response = self.youth_policy_chain.invoke({
