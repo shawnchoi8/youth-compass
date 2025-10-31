@@ -1,21 +1,20 @@
 services:
-  # MySQL database
-  mysql:
-    image: mysql:8.0
+  # PostgreSQL database
+  postgres:
+    image: postgres:16-alpine
     container_name: youth-compass-db
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-youth_compass}
-      MYSQL_USER: ${MYSQL_USER:-admin}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-adminpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-youth_compass}
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-adminpassword}
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql-data:/var/lib/mysql
+      - postgres-data:/var/lib/postgresql/data
     networks:
       - youth-compass-network
     healthcheck:
-      test: ["CMD", "sh", "-c", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-youth_compass}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -30,12 +29,12 @@ services:
     ports:
       - "8080:8080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-youth_compass}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul
-      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-admin}
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-adminpassword}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-youth_compass}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-admin}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-adminpassword}
       AI_SERVICE_URL: http://ai-service:8000
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
     networks:
       - youth-compass-network
@@ -67,8 +66,7 @@ services:
     environment:
       UPSTAGE_API_KEY: ${UPSTAGE_API_KEY}
       TAVILY_API_KEY: ${TAVILY_API_KEY}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-admin}:${MYSQL_PASSWORD:-adminpassword}@mysql:3306/${MYSQL_DATABASE:-youth_compass}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-adminpassword}@postgres:5432/${POSTGRES_DB:-youth_compass}
       BACKEND_URL: http://backend:8080
       CHROMA_HOST: chromadb
       CHROMA_PORT: 8000
@@ -101,8 +99,8 @@ services:
     restart: unless-stopped
 
 volumes:
-  mysql-data:
-    name: youth-compass-mysql-data
+  postgres-data:
+    name: youth-compass-postgres-data
   chroma-data:
     name: youth-compass-chroma-data
 
