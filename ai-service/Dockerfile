@@ -6,11 +6,14 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Python 의존성 복사 및 설치
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir playwright && \
+    playwright install --with-deps chromium && \
     pip install --no-cache-dir -r requirements.txt
 
 # 애플리케이션 코드 복사
