@@ -523,6 +523,9 @@ class RAGService:
             
             # 기존 벡터 스토어가 없으면 새로 생성
             if not self.vector_store:
+                if not self.collection_name or not self.embeddings:
+                    logger.error(":x: 벡터 스토어 초기화 실패: collection_name 또는 embeddings 누락")
+                    return 0, skipped_count
                 logger.info("벡터 스토어 초기화 중...")
                 self.vector_store = Chroma(
                     client=self.chroma_client,
