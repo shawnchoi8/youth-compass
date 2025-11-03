@@ -169,23 +169,42 @@ class GraphService:
             return GraphState(context="", search_source="pdf")
     
     def _relevance_check(self, state: GraphState) -> GraphState:
-        """2. 관련성 체크 노드"""
+        """2. 관련성 체크 노드 (LLM 기반)"""
         # 컨텍스트가 없으면 관련성 없음
         context = state.get("context", "")
         if not context or context.strip() == "":
             logger.info("관련성 체크: NO (문서 없음)")
             return GraphState(relevance="no")
         
-        # 간단한 관련성 체크 (청년 정책 관련 키워드 확인)
         question = state["question"]
-        youth_keywords = ["청년", "주택", "전세", "대출", "금융", "지원", "정책", "임대"]
         
-        # 질문이나 컨텍스트에 청년 정책 관련 키워드가 있는지 확인
-        is_relevant = any(keyword in question for keyword in youth_keywords) or \
-                      any(keyword in context[:500] for keyword in youth_keywords)
-        
-        relevance = "yes" if is_relevant else "no"
-        logger.info(f"관련성 체크: {relevance.upper()}")
+        # LLM을 사용한 정교한 관련성 체크
+        relevance_prompt = f"""당신은 문서의 관련성을 평가하는 전문가입니다.
+
+질문: {question}
+
+검색된 문서 내용:
+{context[:1000]}
+
+위 문서가 질문에 답변하는 데 유용한 정보를 포함하고 있습니까?
+
+규칙:
+- 문서 내용이 질문과 직접적으로 관련이 있으면 "YES"
+- 문서 내용이 질문과 전혀 관련이 없으면 "NO"
+- 단순히 키워드가 일치하는 것이 아니라, 실질적으로 답변에 도움이 되는지 판단하세요
+
+답변은 반드시 "YES" 또는 "NO" 중 하나만 출력하세요."""
+
+        try:
+            response = self.llm.invoke(relevance_prompt)
+            result = response.content.strip().upper()
+            
+            relevance = "yes" if "YES" in result else "no"
+            logger.info(f"관련성 체크: {relevance.upper()} (LLM 판단: {result[:20]})")
+            
+        except Exception as e:
+            logger.error(f"관련성 체크 실패: {e}, 기본값 'yes' 사용")
+            relevance = "yes"
         
         return GraphState(relevance=relevance)
     
