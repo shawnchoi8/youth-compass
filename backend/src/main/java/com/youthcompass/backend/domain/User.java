@@ -1,20 +1,26 @@
 package com.youthcompass.backend.domain;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * 사용자 엔티티
+ * 시스템 사용자의 정보를 관리하는 도메인 객체
+ */
 @Entity
 @Table(name = "users")
 @Getter
-@Setter
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class User {
 
     @Id
@@ -56,4 +62,37 @@ public class User {
     @UpdateTimestamp
     @Column(name = "user_updated_at")
     private LocalDateTime userUpdatedAt;
+
+    /**
+     * 사용자 프로필 정보를 업데이트합니다.
+     * null이 아닌 필드만 업데이트됩니다.
+     *
+     * @param name 이름
+     * @param residence 거주지
+     * @param age 나이
+     * @param salary 급여
+     * @param assets 자산
+     * @param note 비고
+     */
+    public void updateProfile(String name, String residence, Integer age,
+                            BigDecimal salary, BigDecimal assets, String note) {
+        if (name != null) {
+            this.userName = name;
+        }
+        if (residence != null) {
+            this.userResidence = residence;
+        }
+        if (age != null) {
+            this.userAge = age;
+        }
+        if (salary != null) {
+            this.userSalary = salary;
+        }
+        if (assets != null) {
+            this.userAssets = assets;
+        }
+        if (note != null) {
+            this.userNote = note;
+        }
+    }
 }

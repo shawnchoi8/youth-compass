@@ -1,18 +1,24 @@
 package com.youthcompass.backend.domain;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
+/**
+ * FAQ 엔티티
+ * 자주 묻는 질문과 답변 정보를 관리하는 도메인 객체
+ */
 @Entity
 @Table(name = "faq")
 @Getter
-@Setter
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Faq {
 
     @Id
