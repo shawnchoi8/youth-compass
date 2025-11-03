@@ -27,6 +27,7 @@ ai-service/__pycache__/
 ai-service/*.pyc
 ai-service/venv/
 ai-service/.venv/
+ai-service/data/documents/
 
 # etc
 echo "*.zip" >> .gitignore

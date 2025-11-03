@@ -42,7 +42,7 @@ class RAGService:
         self._initialize()
     
     def _initialize(self):
-        """서비스 초기화"""
+        """서비스 초기화 (경량화 - 문서 로드는 지연)"""
         try:
             # ChromaDB 클라이언트 초기화
             self._initialize_chroma_client()
@@ -53,10 +53,11 @@ class RAGService:
                     model=settings.upstage_embedding_model,
                     api_key=settings.upstage_api_key
                 )
-                logger.info("Upstage 임베딩 모델 초기화 완료")
+                logger.info("✅ Upstage 임베딩 모델 초기화 완료")
+                logger.info("📄 문서는 첫 요청 시 또는 /reload-documents 호출 시 로드됩니다")
                 
-                # 문서 로드 시도
-                self.load_documents()
+                # 문서 로드는 하지 않음 (지연 로딩)
+                # self.load_documents()  # ← 제거
             else:
                 logger.warning("UPSTAGE_API_KEY가 설정되지 않았습니다.")
         except Exception as e:
@@ -64,39 +65,53 @@ class RAGService:
     
     def _initialize_chroma_client(self):
         """ChromaDB 클라이언트 초기화"""
+        import time
+        
+        # Docker ChromaDB 연결 시도 (재시도 로직 포함)
+        chroma_host = settings.chroma_host
+        chroma_port = settings.chroma_port
+        max_retries = 3
+        retry_delay = 2
+        
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"ChromaDB 연결 시도 ({attempt + 1}/{max_retries}): http://{chroma_host}:{chroma_port}")
+                
+                self.chroma_client = chromadb.HttpClient(
+                    host=chroma_host,
+                    port=chroma_port,
+                    settings=ChromaSettings(
+                        anonymized_telemetry=False,
+                        allow_reset=True
+                    )
+                )
+                
+                # 연결 테스트
+                collections = self.chroma_client.list_collections()
+                logger.info(f"✅ ChromaDB 연결 성공! (기존 컬렉션: {len(collections)}개)")
+                return  # 성공하면 바로 리턴
+                
+            except Exception as e:
+                logger.warning(f"❌ ChromaDB 연결 실패 ({attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    logger.info(f"⏳ {retry_delay}초 후 재시도...")
+                    time.sleep(retry_delay)
+                else:
+                    logger.warning("ChromaDB 연결 최종 실패. 로컬 모드로 전환합니다.")
+        
+        # 모든 재시도 실패 - 로컬 모드로 fallback
         try:
-            # HttpClient 사용 (docker-compose의 chromadb 서비스에 연결)
-            chroma_host = settings.chroma_host
-            chroma_port = settings.chroma_port
-            
-            logger.info(f"ChromaDB 연결 시도: {chroma_host}:{chroma_port}")
-            
-            self.chroma_client = chromadb.HttpClient(
-                host=chroma_host,
-                port=chroma_port,
+            logger.info("로컬 PersistentClient 모드로 초기화 시도...")
+            self.chroma_client = chromadb.PersistentClient(
+                path="./chroma_db",
                 settings=ChromaSettings(
                     anonymized_telemetry=False
                 )
             )
-            
-            # 연결 테스트
-            self.chroma_client.heartbeat()
-            logger.info("ChromaDB 연결 성공")
-            
-        except Exception as e:
-            logger.warning(f"ChromaDB 연결 실패: {e}. 로컬 모드로 전환합니다.")
-            try:
-                # 로컬 persistent 모드로 fallback
-                self.chroma_client = chromadb.PersistentClient(
-                    path="./chroma_db",
-                    settings=ChromaSettings(
-                        anonymized_telemetry=False
-                    )
-                )
-                logger.info("ChromaDB 로컬 모드로 초기화 완료")
-            except Exception as e2:
-                logger.error(f"ChromaDB 로컬 초기화도 실패: {e2}")
-                self.chroma_client = None
+            logger.info("✅ ChromaDB 로컬 모드로 초기화 완료")
+        except Exception as e2:
+            logger.error(f"❌ ChromaDB 로컬 초기화도 실패: {e2}")
+            self.chroma_client = None
     
     def load_documents(self):
         """
@@ -175,7 +190,7 @@ class RAGService:
     
     def search(self, query: str, k: int = None) -> List[Dict]:
         """
-        유사 문서 검색
+        유사 문서 검색 (지연 로딩 포함)
         
         Args:
             query: 검색 쿼리
@@ -184,6 +199,11 @@ class RAGService:
         Returns:
             검색된 문서 리스트 [{"content": str, "metadata": dict}]
         """
+        # 지연 로딩: 문서가 없으면 자동으로 로드 시도
+        if not self.has_documents and self.embeddings:
+            logger.info("📥 문서가 로드되지 않음. 자동 로드 시작...")
+            self.load_documents()
+        
         if not self.vector_store or not self.has_documents:
             return []
         
@@ -204,7 +224,12 @@ class RAGService:
             return []
     
     def get_retriever(self):
-        """벡터 스토어의 retriever 반환"""
+        """벡터 스토어의 retriever 반환 (지연 로딩 포함)"""
+        # 지연 로딩: 문서가 없으면 자동으로 로드 시도
+        if not self.has_documents and self.embeddings:
+            logger.info("📥 문서가 로드되지 않음. 자동 로드 시작...")
+            self.load_documents()
+        
         if not self.vector_store:
             return None
         return self.vector_store.as_retriever(
