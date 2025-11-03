@@ -147,10 +147,10 @@ async def reload_documents(force: bool = False):
     try:
         logger.info(f"문서 {'전체 재로딩' if force else '증분 업데이트'} 시작")
         
-        added_count, skipped_count = rag_service.add_documents_incremental(force_reload=force)
+        added_pdf_count, skipped_pdf_count = rag_service.add_documents_incremental(force_reload=force)
         
         # -1은 전체 재로딩을 의미
-        if added_count == -1:
+        if added_pdf_count == -1:
             return {
                 "status": "success",
                 "mode": "full_reload",
@@ -161,10 +161,10 @@ async def reload_documents(force: bool = False):
         return {
             "status": "success",
             "mode": "incremental",
-            "added_count": added_count,
-            "skipped_count": skipped_count,
+            "added_count": added_pdf_count,
+            "skipped_count": skipped_pdf_count,
             "has_documents": rag_service.has_documents,
-            "message": f"증분 업데이트 완료: {added_count}개 추가, {skipped_count}개 건너뜀"
+            "message": f"증분 업데이트 완료: {added_pdf_count}개 추가, {skipped_pdf_count}개 건너뜀"
         }
         
     except Exception as e:
