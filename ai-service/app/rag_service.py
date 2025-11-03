@@ -9,6 +9,7 @@ TODO:
 """
 
 import os
+import time
 from glob import glob
 from typing import List, Dict, Optional
 from langchain_upstage import UpstageEmbeddings
@@ -42,9 +43,11 @@ class RAGService:
         self._initialize()
     
     def _initialize(self):
-        """서비스 초기화 (경량화 - 문서 로드는 지연)"""
+        """서비스 초기화 (백그라운드 문서 로드)"""
+        logger.info("🚀 RAGService 초기화 시작...")
         try:
             # ChromaDB 클라이언트 초기화
+            logger.info("🔌 ChromaDB 클라이언트 초기화 시작...")
             self._initialize_chroma_client()
             
             # Upstage API 키 확인
@@ -54,14 +57,21 @@ class RAGService:
                     api_key=settings.upstage_api_key
                 )
                 logger.info("✅ Upstage 임베딩 모델 초기화 완료")
-                logger.info("📄 문서는 첫 요청 시 또는 /reload-documents 호출 시 로드됩니다")
                 
-                # 문서 로드는 하지 않음 (지연 로딩)
-                # self.load_documents()  # ← 제거
+                # 백그라운드에서 문서 로드 시작
+                import threading
+                threading.Thread(
+                    target=self._background_load,
+                    daemon=True,
+                    name="DocumentLoader"
+                ).start()
+                logger.info("📥 백그라운드에서 문서 로딩 시작...")
             else:
                 logger.warning("UPSTAGE_API_KEY가 설정되지 않았습니다.")
         except Exception as e:
-            logger.error(f"RAG 서비스 초기화 실패: {e}")
+            logger.error(f"❌ RAG 서비스 초기화 실패: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
     
     def _initialize_chroma_client(self):
         """ChromaDB 클라이언트 초기화"""
@@ -113,6 +123,16 @@ class RAGService:
             logger.error(f"❌ ChromaDB 로컬 초기화도 실패: {e2}")
             self.chroma_client = None
     
+    def _background_load(self):
+        """백그라운드에서 문서 로드"""
+        try:
+            logger.info("📚 백그라운드 문서 로딩 시작...")
+            self.load_documents()
+            logger.info("✅ 백그라운드 문서 로딩 완료!")
+        except Exception as e:
+            logger.error(f"❌ 백그라운드 문서 로딩 실패: {e}")
+            logger.info("💡 첫 요청 시 지연 로딩으로 재시도됩니다.")
+    
     def load_documents(self):
         """
         문서 로드 및 ChromaDB 벡터 스토어 생성
@@ -123,6 +143,31 @@ class RAGService:
                 logger.warning("ChromaDB 클라이언트 또는 임베딩이 초기화되지 않았습니다")
                 self.has_documents = False
                 return
+            
+            # ChromaDB에 기존 컬렉션이 있는지 확인
+            try:
+                # embedding_function 없이 컬렉션 확인 (단순 존재 여부만)
+                existing_collection = self.chroma_client.get_collection(
+                    name=self.collection_name
+                )
+                doc_count = existing_collection.count()
+                
+                if doc_count > 0:
+                    logger.info(f"✅ 기존 컬렉션 발견: {self.collection_name} ({doc_count}개 문서)")
+                    logger.info("📦 기존 데이터를 사용합니다. 새로 로딩하지 않습니다.")
+                    
+                    # 기존 컬렉션을 벡터 스토어로 사용
+                    self.vector_store = Chroma(
+                        client=self.chroma_client,
+                        collection_name=self.collection_name,
+                        embedding_function=self.embeddings
+                    )
+                    self.has_documents = True
+                    return
+                else:
+                    logger.info("기존 컬렉션이 비어있습니다. 새로 로딩합니다.")
+            except Exception as e:
+                logger.info(f"기존 컬렉션 없음: {e}. 새로 생성합니다.")
             
             # PDF 파일 찾기
             pdf_files = []
@@ -199,9 +244,9 @@ class RAGService:
         Returns:
             검색된 문서 리스트 [{"content": str, "metadata": dict}]
         """
-        # 지연 로딩: 문서가 없으면 자동으로 로드 시도
+        # Fallback: 백그라운드 로딩 실패 시 지연 로딩
         if not self.has_documents and self.embeddings:
-            logger.info("📥 문서가 로드되지 않음. 자동 로드 시작...")
+            logger.info("📥 문서가 로드되지 않음. 지연 로딩 시작...")
             self.load_documents()
         
         if not self.vector_store or not self.has_documents:
@@ -224,10 +269,10 @@ class RAGService:
             return []
     
     def get_retriever(self):
-        """벡터 스토어의 retriever 반환 (지연 로딩 포함)"""
-        # 지연 로딩: 문서가 없으면 자동으로 로드 시도
+        """벡터 스토어의 retriever 반환 (지연 로딩 fallback 포함)"""
+        # Fallback: 백그라운드 로딩 실패 시 지연 로딩
         if not self.has_documents and self.embeddings:
-            logger.info("📥 문서가 로드되지 않음. 자동 로드 시작...")
+            logger.info("📥 문서가 로드되지 않음. 지연 로딩 시작...")
             self.load_documents()
         
         if not self.vector_store:

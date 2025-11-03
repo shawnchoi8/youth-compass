@@ -7,20 +7,20 @@ import uuid
 import logging
 from dotenv import load_dotenv
 
-# 서비스 임포트
-from app.config import settings
-from app.graph_service import graph_service
-from app.rag_service import rag_service
-
 # 환경 변수 로드
 load_dotenv()
 
-# 로깅 설정
+# 로깅 설정 (서비스 임포트 전에 먼저!)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+# 서비스 임포트 (로깅 설정 후!)
+from app.config import settings
+from app.graph_service import graph_service
+from app.rag_service import rag_service
 
 app = FastAPI(
     title="Youth Compass AI Service",
