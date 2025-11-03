@@ -137,18 +137,34 @@ async def search_policies(query: str, limit: int = 5):
 
 # 문서 재로드 엔드포인트
 @app.post("/reload-documents")
-async def reload_documents():
+async def reload_documents(force: bool = False):
     """
     PDF 문서를 다시 로드하고 벡터 스토어를 재구축
+    
+    Args:
+        force: True면 전체 재로딩 (기존 데이터 삭제), False면 증분 업데이트
     """
     try:
-        logger.info("문서 재로드 시작")
-        rag_service.load_documents()
+        logger.info(f"문서 {'전체 재로딩' if force else '증분 업데이트'} 시작")
+        
+        added_count, skipped_count = rag_service.add_documents_incremental(force_reload=force)
+        
+        # -1은 전체 재로딩을 의미
+        if added_count == -1:
+            return {
+                "status": "success",
+                "mode": "full_reload",
+                "has_documents": rag_service.has_documents,
+                "message": "전체 문서를 다시 로드했습니다"
+            }
         
         return {
             "status": "success",
+            "mode": "incremental",
+            "added_count": added_count,
+            "skipped_count": skipped_count,
             "has_documents": rag_service.has_documents,
-            "message": "문서가 성공적으로 로드되었습니다" if rag_service.has_documents else "문서를 찾을 수 없습니다"
+            "message": f"증분 업데이트 완료: {added_count}개 추가, {skipped_count}개 건너뜀"
         }
         
     except Exception as e:
