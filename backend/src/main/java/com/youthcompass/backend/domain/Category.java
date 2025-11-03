@@ -1,18 +1,24 @@
 package com.youthcompass.backend.domain;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
+/**
+ * 카테고리 엔티티
+ * FAQ 분류를 위한 카테고리 정보를 관리하는 도메인 객체
+ */
 @Entity
 @Table(name = "categories")
 @Getter
-@Setter
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Category {
 
     @Id

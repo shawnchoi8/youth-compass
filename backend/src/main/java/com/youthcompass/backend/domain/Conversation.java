@@ -1,18 +1,24 @@
 package com.youthcompass.backend.domain;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
+/**
+ * 대화방 엔티티
+ * 사용자와 AI 간의 대화 세션을 관리하는 도메인 객체
+ */
 @Entity
 @Table(name = "user_conversations")
 @Getter
-@Setter
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Conversation {
 
     @Id

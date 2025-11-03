@@ -1,18 +1,24 @@
 package com.youthcompass.backend.domain;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
+/**
+ * 메시지 엔티티
+ * 대화방 내의 개별 메시지를 관리하는 도메인 객체
+ */
 @Entity
 @Table(name = "user_messages")
 @Getter
-@Setter
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Message {
 
     @Id
