@@ -8,6 +8,7 @@ import com.youthcompass.backend.dto.chatbot.SendMessageRequest;
 import com.youthcompass.backend.dto.chatbot.SendMessageResponse;
 import com.youthcompass.backend.dto.ai.AiChatRequest;
 import com.youthcompass.backend.dto.ai.AiChatResponse;
+import com.youthcompass.backend.dto.user.UserProfileDTO;
 import com.youthcompass.backend.repository.ConversationRepository;
 import com.youthcompass.backend.repository.MessageRepository;
 import com.youthcompass.backend.repository.UserRepository;
@@ -21,9 +22,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import org.springframework.http.MediaType;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -108,13 +107,7 @@ public class ChatbotService {
             .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
 
         // 사용자 프로필 정보 생성
-        Map<String, Object> userProfile = new HashMap<>();
-        userProfile.put("user_id", user.getUserId());
-        userProfile.put("age", user.getUserAge());
-        userProfile.put("residence", user.getUserResidence());
-        userProfile.put("salary", user.getUserSalary());
-        userProfile.put("assets", user.getUserAssets());
-        userProfile.put("note", user.getUserNote());
+        UserProfileDTO userProfile = UserProfileDTO.from(user);
 
         // AI 서비스 요청 생성
         AiChatRequest aiRequest = new AiChatRequest(
@@ -199,15 +192,9 @@ public class ChatbotService {
         // 사용자 프로필 정보 생성
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
-        
-        Map<String, Object> userProfile = new HashMap<>();
-        userProfile.put("user_id", user.getUserId());
-        userProfile.put("age", user.getUserAge());
-        userProfile.put("residence", user.getUserResidence());
-        userProfile.put("salary", user.getUserSalary());
-        userProfile.put("assets", user.getUserAssets());
-        userProfile.put("note", user.getUserNote());
-        
+
+        UserProfileDTO userProfile = UserProfileDTO.from(user);
+
         // AI 서비스 요청 생성
         AiChatRequest aiRequest = new AiChatRequest(
             request.getMessage(),
