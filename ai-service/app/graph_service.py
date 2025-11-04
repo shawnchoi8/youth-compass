@@ -14,6 +14,7 @@ from tavily import TavilyClient
 from app.config import settings
 from app.rag_service import rag_service
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -76,22 +77,40 @@ class GraphService:
         self.tavily_client = None
         self.app = None
         self.memory = MemorySaver()
+        self._initializing = False
+        self._initialized = False
         
-        # 초기화
-        self._initialize()
+        # 초기화는 나중에 (서버 시작 후)
+        # self._initialize()  # 주석 처리
+    
+    def initialize(self):
+        """서비스 초기화 (동기)"""
+        if self._initializing or self._initialized:
+            return
+        self._initializing = True
+        try:
+            self._initialize()
+            self._initialized = True
+            logger.info("GraphService 초기화 완료")
+        except Exception as e:
+            logger.error(f"GraphService 초기화 실패: {e}", exc_info=True)
+            self._initialized = False
+        finally:
+            self._initializing = False
     
     def _initialize(self):
-        """서비스 초기화"""
+        """서비스 초기화 내부 로직"""
         try:
-            # Upstage Solar LLM 초기화
+            # Upstage Solar LLM 초기화 (스트리밍 지원)
             if settings.upstage_api_key:
                 self.llm = ChatUpstage(
                     model=settings.upstage_model,
                     temperature=settings.temperature,
-                    api_key=settings.upstage_api_key
+                    api_key=settings.upstage_api_key,
+                    streaming=True  # 스트리밍 활성화
                 )
                 self.youth_policy_chain = YOUTH_POLICY_PROMPT | self.llm | StrOutputParser()
-                logger.info("Upstage Solar LLM 초기화 완료")
+                logger.info("Upstage Solar LLM 초기화 완료 (스트리밍 지원)")
             else:
                 logger.warning("UPSTAGE_API_KEY가 설정되지 않았습니다")
             
@@ -354,6 +373,152 @@ class GraphService:
             return {
                 "answer": f"오류가 발생했습니다: {str(e)}",
                 "search_source": "error"
+            }
+    
+    async def stream_ask(
+        self,
+        question: str,
+        thread_id: str,
+        user_profile: Optional[dict] = None
+    ):
+        """
+        질문하고 스트리밍으로 답변 받기
+        
+        Args:
+            question: 사용자 질문
+            thread_id: 대화 세션 ID
+            user_profile: 사용자 프로필 (선택)
+            
+        Yields:
+            답변 청크 및 메타데이터
+        """
+        if not self.app:
+            yield {
+                "type": "error",
+                "content": "AI 서비스가 초기화되지 않았습니다."
+            }
+            return
+        
+        try:
+            logger.info(f"스트리밍 질문 처리 시작: {question[:50]}...")
+            
+            # 1. 문서 검색 단계
+            yield {"type": "status", "content": "문서 검색 중..."}
+            documents = rag_service.search(question, k=3)
+            
+            context = "\n\n".join([
+                f"문서 {i+1}:\n{doc['content']}" 
+                for i, doc in enumerate(documents)
+            ]) if documents else ""
+            
+            # 2. 관련성 체크 (청년 정책 관련 키워드 확인)
+            youth_keywords = ["청년", "주택", "전세", "대출", "금융", "지원", "정책", "임대", "일자리"]
+            is_relevant = any(keyword in question for keyword in youth_keywords) or \
+                          (context and any(keyword in context[:500] for keyword in youth_keywords))
+            
+            # 3. 관련성이 없거나 컨텍스트가 부족하면 웹 검색
+            if not is_relevant or not context or len(context) < 100:
+                yield {"type": "status", "content": "웹 검색 중..."}
+                search_source = "web"
+                # 웹 검색
+                if self.tavily_client:
+                    try:
+                        web_results = self.tavily_client.search(
+                            query=question,
+                            max_results=3
+                        )
+                        if web_results and "results" in web_results:
+                            context = "\n\n".join([
+                                f"[{result.get('title', 'Unknown')}]\n{result.get('content', '')}"
+                                for result in web_results.get("results", [])
+                            ])
+                        else:
+                            context = "관련 정보를 찾을 수 없습니다."
+                    except Exception as e:
+                        logger.warning(f"웹 검색 실패: {e}")
+                        context = "웹 검색 중 오류가 발생했습니다."
+                else:
+                    context = "웹 검색 기능을 사용할 수 없습니다."
+            else:
+                # PDF 검색 결과가 관련 있으면 PDF 사용
+                search_source = "pdf"
+            
+            # 3. 메타데이터 전송
+            yield {
+                "type": "metadata",
+                "search_source": search_source,
+                "context_length": len(context)
+            }
+            
+            # 4. 답변 생성 (스트리밍)
+            yield {"type": "status", "content": "답변 생성 중..."}
+            
+            if not self.llm:
+                yield {
+                    "type": "error",
+                    "content": "AI 서비스가 초기화되지 않았습니다."
+                }
+                return
+            
+            # 대화 히스토리 포맷팅
+            chat_history = ""
+            user_profile_text = ""
+            if user_profile:
+                user_profile_text = f"\n사용자 프로필: {json.dumps(user_profile, ensure_ascii=False)}"
+            
+            # 프롬프트 생성
+            messages = YOUTH_POLICY_PROMPT.format_messages(
+                question=question,
+                context=context if context else "관련 정보를 찾을 수 없습니다.",
+                chat_history=chat_history,
+                user_profile=user_profile_text
+            )
+            
+            # 스트리밍 답변 생성 (LLM 직접 사용)
+            full_response = ""
+            try:
+                async for chunk in self.llm.astream(messages):
+                    if hasattr(chunk, 'content') and chunk.content:
+                        content = chunk.content
+                        full_response += content
+                        yield {
+                            "type": "content",
+                            "content": content
+                        }
+            except Exception as e:
+                logger.error(f"스트리밍 답변 생성 중 오류: {e}")
+                yield {
+                    "type": "error",
+                    "content": f"답변 생성 중 오류가 발생했습니다: {str(e)}"
+                }
+                return
+            
+            # 5. 출처 정보 추가
+            source_text = {
+                "pdf": "\n\n📄 *[출처: 업로드된 정책 문서]*",
+                "web": "\n\n🌐 *[출처: 웹 검색 결과]*"
+            }.get(search_source, "")
+            
+            if source_text:
+                yield {
+                    "type": "content",
+                    "content": source_text
+                }
+            
+            # 6. 완료 신호
+            yield {
+                "type": "done",
+                "search_source": search_source,
+                "full_response": full_response + source_text
+            }
+            
+            logger.info("스트리밍 답변 생성 완료")
+            
+        except Exception as e:
+            logger.error(f"스트리밍 질문 처리 실패: {e}")
+            yield {
+                "type": "error",
+                "content": f"오류가 발생했습니다: {str(e)}"
             }
 
 

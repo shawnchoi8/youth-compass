@@ -38,13 +38,30 @@ class RAGService:
         self.vector_store = None
         self.has_documents = False
         self.collection_name = "youth_policy_docs"
+        self._initializing = False
+        self._initialized = False
         
-        # 초기화 시도
-        self._initialize()
+        # 초기화는 나중에 (서버 시작 후)
+        # self._initialize()  # 주석 처리
+    
+    def initialize(self):
+        """서비스 초기화 (동기)"""
+        if self._initializing or self._initialized:
+            return
+        self._initializing = True
+        try:
+            self._initialize()
+            self._initialized = True
+        except Exception as e:
+            logger.error(f"RAG 서비스 초기화 실패: {e}", exc_info=True)
+            self._initialized = False
+        finally:
+            self._initializing = False
     
     def _initialize(self):
         """서비스 초기화 (백그라운드 문서 로드)"""
         logger.info("🚀 RAGService 초기화 시작...")
+        """서비스 초기화 내부 로직"""
         try:
             # ChromaDB 클라이언트 초기화
             logger.info("🔌 ChromaDB 클라이언트 초기화 시작...")

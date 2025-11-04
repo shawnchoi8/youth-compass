@@ -1,10 +1,14 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List
 import os
 import uuid
 import logging
+import json
+import asyncio
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
 # 환경 변수 로드
@@ -17,15 +21,54 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 서비스 임포트 (로깅 설정 후!)
+# 서비스 임포트(로깅 설정 후!)
 from app.config import settings
 from app.graph_service import graph_service
 from app.rag_service import rag_service
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """서버 생명주기 관리"""
+    # 서버 시작 시 백그라운드에서 초기화 시작
+    logger.info("서버 시작: 백그라운드 초기화 시작...")
+    
+    async def initialize_services():
+        """서비스 초기화 (백그라운드)"""
+        try:
+            # 동기 함수를 스레드 풀에서 실행
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, rag_service.initialize)
+            logger.info("RAG 서비스 초기화 완료")
+            
+            await loop.run_in_executor(None, graph_service.initialize)
+            logger.info("Graph 서비스 초기화 완료")
+            
+            logger.info("✅ 모든 서비스 초기화 완료!")
+        except Exception as e:
+            logger.error(f"서비스 초기화 중 오류: {e}", exc_info=True)
+    
+    # 백그라운드 태스크 생성 및 시작 (블로킹하지 않음)
+    init_task = asyncio.create_task(initialize_services())
+    
+    yield
+    
+    # 서버 종료 시 정리 작업
+    logger.info("서버 종료")
+    # 초기화 태스크 취소 시도
+    if not init_task.done():
+        init_task.cancel()
+        try:
+            await init_task
+        except asyncio.CancelledError:
+            pass
+
 
 app = FastAPI(
     title="Youth Compass AI Service",
     description="AI-powered chatbot service for youth policy information",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS 설정
@@ -108,6 +151,59 @@ async def chat(request: ChatRequest):
         
     except Exception as e:
         logger.error(f"챗봇 오류: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# 챗봇 스트리밍 엔드포인트
+@app.post("/chat-stream")
+async def chat_stream(request: ChatRequest):
+    """
+    AI 챗봇과 대화하는 스트리밍 엔드포인트
+    Server-Sent Events (SSE) 형식으로 실시간 답변 전송
+    
+    체감 속도가 극적으로 빨라집니다!
+    """
+    try:
+        # 세션 ID 생성 또는 사용
+        session_id = request.session_id or str(uuid.uuid4())
+        
+        logger.info(f"스트리밍 질문 받음 [세션: {session_id[:8]}]: {request.message[:50]}...")
+        
+        async def generate():
+            """SSE 스트림 생성"""
+            try:
+                # 세션 ID 먼저 전송
+                yield f"data: {json.dumps({'type': 'session', 'session_id': session_id}, ensure_ascii=False)}\n\n"
+                
+                # 스트리밍 답변 생성
+                async for chunk in graph_service.stream_ask(
+                    question=request.message,
+                    thread_id=session_id,
+                    user_profile=request.user_profile
+                ):
+                    # SSE 형식으로 전송
+                    yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                
+            except Exception as e:
+                logger.error(f"스트리밍 오류: {e}")
+                error_data = {
+                    "type": "error",
+                    "content": f"오류가 발생했습니다: {str(e)}"
+                }
+                yield f"data: {json.dumps(error_data, ensure_ascii=False)}\n\n"
+        
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"  # nginx 버퍼링 비활성화
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"스트리밍 초기화 오류: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
