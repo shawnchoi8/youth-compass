@@ -1,11 +1,10 @@
 package com.youthcompass.backend.dto.ai;
 
+import com.youthcompass.backend.dto.user.UserProfileDTO;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.util.Map;
 
 /**
  * AI 챗봇 요청 DTO
@@ -26,5 +25,5 @@ public class AiChatRequest {
     private String sessionId;
 
     /** 사용자 프로필 정보 */
-    private Map<String, Object> userProfile;
+    private UserProfileDTO userProfile;
 }
