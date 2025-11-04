@@ -162,16 +162,16 @@ class GraphService:
         self.app = workflow.compile(checkpointer=self.memory)
         logger.info("LangGraph 워크플로우 구축 완료")
     
-    def _retrieve_document(self, state: GraphState) -> GraphState:
-        """1. PDF 문서 검색 노드"""
+    async def _retrieve_document(self, state: GraphState) -> GraphState:
+        """1. PDF 문서 검색 노드 (비동기)"""
         question = state["question"]
         logger.info(f"PDF 문서 검색: {question[:50]}...")
         
-        # RAG 서비스로 문서 검색
+        # RAG 서비스로 문서 검색 (비동기)
         retriever = rag_service.get_retriever()
         if retriever:
             try:
-                retrieved_docs = retriever.invoke(question)
+                retrieved_docs = await retriever.ainvoke(question)
                 context = rag_service.format_docs(retrieved_docs)
                 
                 if context:
@@ -187,8 +187,8 @@ class GraphService:
             logger.warning("Retriever가 초기화되지 않음")
             return GraphState(context="", search_source="pdf")
     
-    def _relevance_check(self, state: GraphState) -> GraphState:
-        """2. 관련성 체크 노드 (LLM 기반)"""
+    async def _relevance_check(self, state: GraphState) -> GraphState:
+        """2. 관련성 체크 노드 (LLM 기반, 비동기)"""
         # 컨텍스트가 없으면 관련성 없음
         context = state.get("context", "")
         if not context or context.strip() == "":
@@ -197,7 +197,7 @@ class GraphService:
         
         question = state["question"]
         
-        # LLM을 사용한 정교한 관련성 체크
+        # LLM을 사용한 정교한 관련성 체크 (비동기)
         logger.info("🤖 LLM 관련성 체크 시작...")
         relevance_prompt = f"""당신은 문서의 관련성을 평가하는 전문가입니다.
 
@@ -216,7 +216,7 @@ class GraphService:
 답변은 반드시 "YES" 또는 "NO" 중 하나만 출력하세요."""
 
         try:
-            response = self.llm.invoke(relevance_prompt)
+            response = await self.llm.ainvoke(relevance_prompt)
             result = response.content.strip().upper()
             
             relevance = "yes" if "YES" in result else "no"
@@ -228,8 +228,8 @@ class GraphService:
         
         return GraphState(relevance=relevance)
     
-    def _web_search(self, state: GraphState) -> GraphState:
-        """3. 웹 검색 노드"""
+    async def _web_search(self, state: GraphState) -> GraphState:
+        """3. 웹 검색 노드 (비동기)"""
         question = state["question"]
         logger.info(f"웹 검색: {question[:50]}...")
         
@@ -244,10 +244,12 @@ class GraphService:
             # 검색 쿼리 최적화 (청년 정책 키워드 추가)
             enhanced_query = f"청년 {question}" if "청년" not in question else question
             
-            # Tavily 검색 수행
-            search_results = self.tavily_client.search(
-                query=enhanced_query,
-                max_results=5
+            # Tavily 검색 수행 (동기 함수를 비동기로 실행)
+            import asyncio
+            loop = asyncio.get_event_loop()
+            search_results = await loop.run_in_executor(
+                None,
+                lambda: self.tavily_client.search(query=enhanced_query, max_results=5)
             )
             
             # 결과 포맷팅
@@ -266,8 +268,8 @@ class GraphService:
                 search_source="web"
             )
     
-    def _llm_answer(self, state: GraphState) -> GraphState:
-        """4. 답변 생성 노드"""
+    async def _llm_answer(self, state: GraphState) -> GraphState:
+        """4. 답변 생성 노드 (비동기)"""
         question = state["question"]
         context = state.get("context", "")
         
@@ -291,8 +293,8 @@ class GraphService:
                     elif hasattr(msg, 'type') and hasattr(msg, 'content'):
                         chat_history += f"{msg.type}: {msg.content}\n"
             
-            # 답변 생성
-            response = self.youth_policy_chain.invoke({
+            # 답변 생성 (비동기)
+            response = await self.youth_policy_chain.ainvoke({
                 "question": question,
                 "context": context,
                 "chat_history": chat_history,
@@ -385,9 +387,9 @@ class GraphService:
         """
         질문하고 스트리밍으로 답변 받기
         
-        핵심 최적화: LangGraph 구조를 우회하여 직접 스트리밍
-        - llm_answer 노드가 완료될 때까지 기다리지 않고
-        - 관련성 체크 완료 후 바로 LLM 스트리밍 시작
+        LangGraph 워크플로우를 사용하여 스트리밍 
+        - 모든 노드를 비동기로 최적화하여 성능 개선
+        - llm_answer 노드에서 스트리밍 생성
         
         Args:
             question: 사용자 질문
@@ -405,7 +407,7 @@ class GraphService:
             return
         
         try:
-            logger.info(f"스트리밍 질문 처리 시작: {question[:50]}...")
+            logger.info(f"스트리밍 질문 처리 시작 (LangGraph 사용): {question[:50]}...")
             
             # 입력 준비
             inputs = GraphState(
@@ -416,186 +418,213 @@ class GraphService:
             # 설정
             config = {"configurable": {"thread_id": thread_id}}
             
-            # LangGraph 워크플로우 스트리밍 실행
-            # 하지만 llm_answer 노드는 건너뛰고 직접 스트리밍
+            # LangGraph 워크플로우 실행 
+            # 하지만 llm_answer 노드 완료를 기다리지 않고, 관련성 체크 완료 후 즉시 스트리밍 시작
             full_answer = ""
             search_source = "unknown"
+            first_content_received = False
             context = ""
             relevance = "yes"
+            streaming_started = False
             
-            # 핵심 최적화: LangGraph를 우회하고 비동기 메서드 직접 사용
-            # 동기 함수를 run_in_executor로 감싸는 대신, LangChain의 비동기 메서드 사용
-            
-            # 1. 문서 검색 (비동기로 직접 실행)
-            yield {"type": "status", "content": "문서 검색 중..."}
-            retriever = rag_service.get_retriever()
-            if retriever:
-                try:
-                    # 비동기 검색 사용
-                    retrieved_docs = await retriever.ainvoke(question)
-                    context = rag_service.format_docs(retrieved_docs)
-                    
-                    if context:
-                        logger.info(f"{len(retrieved_docs)}개의 관련 문서 발견")
-                    else:
-                        logger.info("관련 문서를 찾지 못함")
-                    
-                    search_source = "pdf"
-                except Exception as e:
-                    logger.error(f"문서 검색 실패: {e}")
-                    context = ""
-                    search_source = "pdf"
-            else:
-                logger.warning("Retriever가 초기화되지 않음")
-                context = ""
-                search_source = "pdf"
-            
-            # 2. 관련성 체크 (비동기로 직접 실행)
-            yield {"type": "status", "content": "관련성 검사 중..."}
-            if not context or context.strip() == "":
-                logger.info("관련성 체크: NO (문서 없음)")
-                relevance = "no"
-            else:
-                # LLM을 사용한 정교한 관련성 체크 (비동기)
-                logger.info("🤖 LLM 관련성 체크 시작...")
-                relevance_prompt = f"""당신은 문서의 관련성을 평가하는 전문가입니다.
-
-질문: {question}
-
-검색된 문서 내용:
-{context[:1000]}
-
-위 문서가 질문에 답변하는 데 유용한 정보를 포함하고 있습니까?
-
-규칙:
-- 문서 내용이 질문과 직접적으로 관련이 있으면 "YES"
-- 문서 내용이 질문과 전혀 관련이 없으면 "NO"
-- 단순히 키워드가 일치하는 것이 아니라, 실질적으로 답변에 도움이 되는지 판단하세요
-
-답변은 반드시 "YES" 또는 "NO" 중 하나만 출력하세요."""
-
-                try:
-                    # 비동기 LLM 호출
-                    response = await self.llm.ainvoke(relevance_prompt)
-                    result = response.content.strip().upper()
-                    
-                    relevance = "yes" if "YES" in result else "no"
-                    logger.info(f"✅ 관련성 체크 완료: {relevance.upper()} (LLM 판단: {result[:20]})")
-                    
-                except Exception as e:
-                    logger.error(f"관련성 체크 실패: {e}, 기본값 'yes' 사용")
-                    relevance = "yes"
-            
-            # 관련성 체크 완료 시점 기록
-            yield {
-                "type": "metadata",
-                "relevance_check_completed": True,
-                "relevance": relevance,
-                "relevance_check_duration": "measured"
-            }
-            
-            # 3. 웹 검색 (필요한 경우, 비동기로 직접 실행)
-            if relevance == "no":
-                yield {"type": "status", "content": "관련성 낮음 - 웹 검색 중..."}
-                logger.info(f"웹 검색: {question[:50]}...")
-                
-                if not self.tavily_client:
-                    logger.warning("Tavily 클라이언트가 초기화되지 않음")
-                    context = "웹 검색 기능을 사용할 수 없습니다."
-                    search_source = "web"
-                else:
-                    try:
-                        # 검색 쿼리 최적화 (청년 정책 키워드 추가)
-                        enhanced_query = f"청년 {question}" if "청년" not in question else question
+            # LangGraph 워크플로우를 실행하여 필요한 정보 수집
+            async for event in self.app.astream(inputs, config):
+                # 각 노드의 이벤트 처리
+                for node_name, node_output in event.items():
+                    if node_name == "retrieve":
+                        yield {"type": "status", "content": "문서 검색 중..."}
+                        context = node_output.get("context", "")
+                        search_source = node_output.get("search_source", "unknown")
                         
-                        # Tavily 검색 수행 (동기이지만 빠름)
-                        import asyncio
-                        loop = asyncio.get_event_loop()
-                        search_results = await loop.run_in_executor(
-                            None,
-                            lambda: self.tavily_client.search(query=enhanced_query, max_results=5)
-                        )
-                        
-                        # 결과 포맷팅
-                        context = ""
-                        if search_results and "results" in search_results:
-                            for result in search_results["results"][:3]:
-                                context += f"{result.get('content', '')}\n\n"
-                        
-                        logger.info("웹 검색 완료")
-                        search_source = "web"
-                        
-                    except Exception as e:
-                        logger.error(f"웹 검색 실패: {e}")
-                        context = f"웹 검색 중 오류 발생: {str(e)}"
-                        search_source = "web"
-            else:
-                yield {"type": "status", "content": "관련성 확인됨 - 답변 생성 준비"}
-            
-            # 핵심 최적화: llm_answer 노드를 건너뛰고 직접 스트리밍
-            # 이렇게 하면 첫 응답이 훨씬 빨라집니다!
-            yield {"type": "status", "content": "답변 생성 중..."}
-            
-            # 대화 히스토리 포맷팅 (일반 채팅과 동일하게)
-            # 일반 채팅은 LangGraph를 통해 실행되므로, 여기서는 빈 히스토리 사용
-            # (실제로는 첫 요청이므로 히스토리가 없음)
-            chat_history = ""
-            # 메모리 접근은 느릴 수 있으므로, 첫 요청에서는 스킵
-            
-            # 프롬프트 생성 (일반 채팅과 동일하게)
-            user_profile_text = ""
-            if user_profile:
-                user_profile_text = f"\n사용자 프로필: {json.dumps(user_profile, ensure_ascii=False)}"
-            
-            # 일반 채팅과 동일한 방식으로 체인 사용 (최적화)
-            # 하지만 스트리밍을 위해 체인의 스트리밍 버전 사용
-            chain_input = {
-                "question": question,
-                "context": context if context else "관련 정보를 찾을 수 없습니다.",
-                "chat_history": chat_history,
-                "user_profile": user_profile_text
-            }
-            
-            # 프롬프트 메시지 생성
-            messages = YOUTH_POLICY_PROMPT.format_messages(**chain_input)
-            
-            # 답변 생성 시작 메타데이터 전송 (LLM 호출 직전)
-            yield {
-                "type": "metadata",
-                "answer_generation_started": True,
-                "search_source": search_source,
-                "context_length": len(context)
-            }
-            
-            # LLM 스트리밍 답변 생성 (즉시 시작 - 첫 토큰 빠르게!)
-            try:
-                # LLM 스트리밍 시작 메타데이터는 첫 토큰과 함께 전송
-                first_token_received = False
-                
-                async for chunk in self.llm.astream(messages):
-                    if hasattr(chunk, 'content') and chunk.content:
-                        content = chunk.content
-                        full_answer += content
-                        
-                        # 첫 토큰과 함께 LLM 스트리밍 시작 메타데이터 전송
-                        if not first_token_received:
-                            first_token_received = True
-                            yield {
-                                "type": "metadata",
-                                "llm_streaming_started": True
-                            }
+                    elif node_name == "relevance_check":
+                        yield {"type": "status", "content": "관련성 검사 중..."}
+                        relevance = node_output.get("relevance", "yes")
                         
                         yield {
-                            "type": "content",
-                            "content": content
+                            "type": "metadata",
+                            "relevance_check_completed": True,
+                            "relevance": relevance
                         }
-            except Exception as e:
-                logger.error(f"스트리밍 답변 생성 중 오류: {e}")
-                yield {
-                    "type": "error",
-                    "content": f"답변 생성 중 오류가 발생했습니다: {str(e)}"
+                        
+                        # 핵심 최적화: 관련성 체크 완료 후 즉시 스트리밍 시작!
+                        # llm_answer 노드 완료를 기다리지 않음
+                        if not streaming_started and relevance == "yes":
+                            streaming_started = True
+                            
+                            # 답변 생성 시작
+                            yield {"type": "status", "content": "답변 생성 중..."}
+                            
+                            # 대화 히스토리 포맷팅
+                            chat_history = ""
+                            
+                            # 프롬프트 생성
+                            user_profile_text = ""
+                            if user_profile:
+                                user_profile_text = f"\n사용자 프로필: {json.dumps(user_profile, ensure_ascii=False)}"
+                            
+                            chain_input = {
+                                "question": question,
+                                "context": context if context else "관련 정보를 찾을 수 없습니다.",
+                                "chat_history": chat_history,
+                                "user_profile": user_profile_text
+                            }
+                            
+                            messages = YOUTH_POLICY_PROMPT.format_messages(**chain_input)
+                            
+                            yield {
+                                "type": "metadata",
+                                "answer_generation_started": True,
+                                "search_source": search_source,
+                                "context_length": len(context)
+                            }
+                            
+                            # LLM 스트리밍 답변 생성 (즉시 시작!)
+                            try:
+                                async for chunk in self.llm.astream(messages):
+                                    if hasattr(chunk, 'content') and chunk.content:
+                                        content = chunk.content
+                                        full_answer += content
+                                        
+                                        if not first_content_received:
+                                            first_content_received = True
+                                            yield {
+                                                "type": "metadata",
+                                                "llm_streaming_started": True
+                                            }
+                                        
+                                        yield {
+                                            "type": "content",
+                                            "content": content
+                                        }
+                            except Exception as e:
+                                logger.error(f"스트리밍 답변 생성 중 오류: {e}")
+                                yield {
+                                    "type": "error",
+                                    "content": f"답변 생성 중 오류가 발생했습니다: {str(e)}"
+                                }
+                                return
+                            
+                    elif node_name == "web_search":
+                        yield {"type": "status", "content": "웹 검색 중..."}
+                        context = node_output.get("context", "")
+                        search_source = node_output.get("search_source", "web")
+                        
+                        # 웹 검색 완료 후 스트리밍 시작
+                        if not streaming_started:
+                            streaming_started = True
+                            
+                            # 답변 생성 시작
+                            yield {"type": "status", "content": "답변 생성 중..."}
+                            
+                            # 대화 히스토리 포맷팅
+                            chat_history = ""
+                            
+                            # 프롬프트 생성
+                            user_profile_text = ""
+                            if user_profile:
+                                user_profile_text = f"\n사용자 프로필: {json.dumps(user_profile, ensure_ascii=False)}"
+                            
+                            chain_input = {
+                                "question": question,
+                                "context": context if context else "관련 정보를 찾을 수 없습니다.",
+                                "chat_history": chat_history,
+                                "user_profile": user_profile_text
+                            }
+                            
+                            messages = YOUTH_POLICY_PROMPT.format_messages(**chain_input)
+                            
+                            yield {
+                                "type": "metadata",
+                                "answer_generation_started": True,
+                                "search_source": search_source,
+                                "context_length": len(context)
+                            }
+                            
+                            # LLM 스트리밍 답변 생성
+                            try:
+                                async for chunk in self.llm.astream(messages):
+                                    if hasattr(chunk, 'content') and chunk.content:
+                                        content = chunk.content
+                                        full_answer += content
+                                        
+                                        if not first_content_received:
+                                            first_content_received = True
+                                            yield {
+                                                "type": "metadata",
+                                                "llm_streaming_started": True
+                                            }
+                                        
+                                        yield {
+                                            "type": "content",
+                                            "content": content
+                                        }
+                            except Exception as e:
+                                logger.error(f"스트리밍 답변 생성 중 오류: {e}")
+                                yield {
+                                    "type": "error",
+                                    "content": f"답변 생성 중 오류가 발생했습니다: {str(e)}"
+                                }
+                                return
+                        
+                    elif node_name == "llm_answer":
+                        # llm_answer 노드는 이미 스트리밍이 시작된 후이므로
+                        # 여기서는 완료 확인만 수행
+                        pass
+            
+            # 스트리밍이 시작되지 않은 경우 (fallback)
+            if not streaming_started:
+                # 일반적인 경우: llm_answer 노드 완료 후 스트리밍 시작
+                yield {"type": "status", "content": "답변 생성 중..."}
+                
+                # 대화 히스토리 포맷팅
+                chat_history = ""
+                
+                # 프롬프트 생성
+                user_profile_text = ""
+                if user_profile:
+                    user_profile_text = f"\n사용자 프로필: {json.dumps(user_profile, ensure_ascii=False)}"
+                
+                chain_input = {
+                    "question": question,
+                    "context": context if context else "관련 정보를 찾을 수 없습니다.",
+                    "chat_history": chat_history,
+                    "user_profile": user_profile_text
                 }
-                return
+                
+                messages = YOUTH_POLICY_PROMPT.format_messages(**chain_input)
+                
+                yield {
+                    "type": "metadata",
+                    "answer_generation_started": True,
+                    "search_source": search_source,
+                    "context_length": len(context)
+                }
+                
+                # LLM 스트리밍 답변 생성
+                try:
+                    async for chunk in self.llm.astream(messages):
+                        if hasattr(chunk, 'content') and chunk.content:
+                            content = chunk.content
+                            full_answer += content
+                            
+                            if not first_content_received:
+                                first_content_received = True
+                                yield {
+                                    "type": "metadata",
+                                    "llm_streaming_started": True
+                                }
+                            
+                            yield {
+                                "type": "content",
+                                "content": content
+                            }
+                except Exception as e:
+                    logger.error(f"스트리밍 답변 생성 중 오류: {e}")
+                    yield {
+                        "type": "error",
+                        "content": f"답변 생성 중 오류가 발생했습니다: {str(e)}"
+                    }
+                    return
             
             # 출처 정보 추가
             source_text = {
@@ -635,7 +664,7 @@ class GraphService:
                 "full_response": full_answer
             }
             
-            logger.info("스트리밍 답변 생성 완료")
+            logger.info("스트리밍 답변 생성 완료 (LangGraph 사용)")
             
         except Exception as e:
             logger.error(f"스트리밍 질문 처리 실패: {e}")
