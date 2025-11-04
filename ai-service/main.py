@@ -123,12 +123,13 @@ async def health_check():
     }
 
 
-# 챗봇 엔드포인트
+# 챗봇 엔드포인트 (일반 채팅 - 전체 답변을 한 번에 반환)
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """
     AI 챗봇과 대화하는 엔드포인트
     LangGraph 워크플로우 사용: PDF 검색 → 관련성 체크 → 웹 검색 (필요시) → 답변 생성
+    전체 답변을 한 번에 반환합니다.
     """
     try:
         # 세션 ID 생성 또는 사용
@@ -160,6 +161,7 @@ async def chat_stream(request: ChatRequest):
     """
     AI 챗봇과 대화하는 스트리밍 엔드포인트
     Server-Sent Events (SSE) 형식으로 실시간 답변 전송
+    LangGraph 워크플로우 사용: PDF 검색 → 관련성 체크 → 웹 검색 (필요시) → 답변 생성
     
     체감 속도가 극적으로 빨라집니다!
     """
