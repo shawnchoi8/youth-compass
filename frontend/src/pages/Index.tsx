@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import Header from "@/components/Header";
 import PolicyCard from "@/components/PolicyCard";
@@ -6,9 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Search, Briefcase, Home, GraduationCap, Coins, Heart, Palette } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { getAllFaqs, FaqResponse } from "@/lib/api";
 
 const Index = () => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [recommendedPolicies, setRecommendedPolicies] = useState<FaqResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   const categories = [
     { name: "일자리", icon: Briefcase, color: "text-orange-500" },
@@ -19,28 +24,30 @@ const Index = () => {
     { name: "문화", icon: Palette, color: "text-purple-500" },
   ];
 
-  const recommendedPolicies = [
-    {
-      id: "1",
-      title: "청년도약계좌",
-      category: "금융",
-      deadline: "2025년 12월 31일",
-      summary: "월 최대 70만원 납입 시 정부지원금 + 이자로 5년 후 최대 5,000만원 목돈 마련",
-    },
-    {
-      id: "2",
-      title: "전세자금대출",
-      category: "주거",
-      summary: "무주택 청년을 위한 저금리 전세자금대출 지원",
-    },
-    {
-      id: "3",
-      title: "청년일자리도약장려금",
-      category: "일자리",
-      deadline: "상시모집",
-      summary: "중소·중견기업 취업 청년에게 최대 1,200만원 지원",
-    },
-  ];
+  useEffect(() => {
+    const loadRecommendedPolicies = async () => {
+      try {
+        setLoading(true);
+        // 모든 FAQ를 가져와서 최신 3개를 추천으로 표시
+        const allFaqs = await getAllFaqs();
+        const latestFaqs = allFaqs
+          .sort((a, b) => new Date(b.faqCreatedAt).getTime() - new Date(a.faqCreatedAt).getTime())
+          .slice(0, 3);
+        setRecommendedPolicies(latestFaqs);
+      } catch (error) {
+        console.error("Failed to load recommended policies:", error);
+        toast({
+          title: "알림",
+          description: "추천 정책을 불러오는데 실패했습니다.",
+          variant: "default",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadRecommendedPolicies();
+  }, []);
 
   const handleSearch = () => {
     if (searchQuery.trim()) {
@@ -115,11 +122,29 @@ const Index = () => {
         {/* Recommended Policies */}
         <section className="space-y-4">
           <h2 className="text-2xl font-bold text-foreground">추천 정책</h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {recommendedPolicies.map((policy) => (
-              <PolicyCard key={policy.id} {...policy} />
-            ))}
-          </div>
+          {loading ? (
+            <div className="flex items-center justify-center h-40">
+              <p className="text-muted-foreground">추천 정책을 불러오는 중...</p>
+            </div>
+          ) : recommendedPolicies.length > 0 ? (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {recommendedPolicies.map((policy) => (
+                <PolicyCard
+                  key={policy.faqId}
+                  id={policy.faqId.toString()}
+                  title={policy.faqQuestion}
+                  category={policy.categoryName}
+                  summary={policy.faqAnswer.substring(0, 80) + "..."}
+                />
+              ))}
+            </div>
+          ) : (
+            <Card className="p-8">
+              <p className="text-center text-muted-foreground">
+                등록된 정책이 없습니다.
+              </p>
+            </Card>
+          )}
         </section>
 
         {/* CTA Section */}

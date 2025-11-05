@@ -7,13 +7,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Send, Sparkles } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import {
+  createConversation,
+  sendMessageStream,
+  FaqResponse,
+} from "@/lib/api";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: string;
-  policies?: any[];
+  policies?: FaqResponse[];
 }
 
 const Chat = () => {
@@ -21,7 +27,10 @@ const Chat = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [conversationId, setConversationId] = useState<number | null>(null);
+  const [initialQuery, setInitialQuery] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -32,28 +41,58 @@ const Chat = () => {
   }, [messages]);
 
   useEffect(() => {
-    const query = searchParams.get("q");
-    if (query) {
-      handleSend(query);
-    } else {
-      // Welcome message
-      setMessages([
-        {
-          id: "welcome",
-          role: "assistant",
-          content: "안녕하세요! 청년 정책에 대해 무엇이든 물어보세요. 😊",
-          timestamp: new Date().toLocaleTimeString("ko-KR", {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        },
-      ]);
-    }
+    // 대화방 생성
+    const initConversation = async () => {
+      try {
+        const conversation = await createConversation({
+          title: "새 대화",
+        });
+        setConversationId(conversation.conversationId);
+
+        // Welcome message
+        setMessages([
+          {
+            id: "welcome",
+            role: "assistant",
+            content: "안녕하세요! 청년 정책에 대해 무엇이든 물어보세요. 😊",
+            timestamp: new Date().toLocaleTimeString("ko-KR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          },
+        ]);
+
+        // URL 쿼리로 전달된 질문 확인
+        const query = searchParams.get("q");
+        if (query) {
+          setInitialQuery(query);
+        }
+      } catch (error) {
+        console.error("Failed to create conversation:", error);
+        toast({
+          title: "오류",
+          description: "대화방 생성에 실패했습니다.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    initConversation();
   }, []);
+
+  // conversationId와 initialQuery가 모두 준비되면 자동 전송
+  useEffect(() => {
+    if (conversationId && initialQuery) {
+      handleSend(initialQuery);
+      setInitialQuery(null); // 한 번만 전송
+    }
+  }, [conversationId, initialQuery]);
 
   const handleSend = async (text?: string) => {
     const messageText = text || input;
-    if (!messageText.trim()) return;
+    if (!messageText.trim() || !conversationId) {
+      return;
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -69,42 +108,78 @@ const Chat = () => {
     setInput("");
     setIsLoading(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: `전세자금대출을 안내해드립니다.
+    // AI 응답을 스트리밍으로 받기
+    let aiResponse = "";
+    const aiMessageId = (Date.now() + 1).toString();
+    let messageAdded = false; // AI 메시지 추가 여부 플래그
 
-대출 대상:
-• 무주택 세대주
-• 연소득 5천만원 이하
+    try {
+      await sendMessageStream(
+        {
+          conversationId,
+          message: messageText,
+        },
+        // onChunk: 스트리밍 데이터 수신
+        (chunk: string) => {
+          try {
+            const data = JSON.parse(chunk);
 
-대출 한도:
-• 수도권: 최대 3억원
-• 지방: 최대 2억원
+            // AI 서비스가 보내는 "content" 타입 처리
+            if (data.type === "content" && data.content) {
+              aiResponse += data.content;
 
-금리: 연 1.2%~2.7%
-
-📌 출처:
-주택도시기금`,
-        timestamp: new Date().toLocaleTimeString("ko-KR", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        policies: [
-          {
-            id: "2",
-            title: "전세자금대출",
-            category: "주거",
-            summary: "무주택 청년을 위한 저금리 전세자금대출 지원",
-          },
-        ],
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
+              // 첫 content가 왔을 때 AI 메시지 추가
+              if (!messageAdded) {
+                messageAdded = true;
+                const aiMessage: Message = {
+                  id: aiMessageId,
+                  role: "assistant",
+                  content: aiResponse,
+                  timestamp: new Date().toLocaleTimeString("ko-KR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }),
+                };
+                setMessages((prev) => [...prev, aiMessage]);
+              } else {
+                // 실시간으로 메시지 업데이트
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === aiMessageId
+                      ? { ...msg, content: aiResponse }
+                      : msg
+                  )
+                );
+              }
+            }
+          } catch (e) {
+            console.error("Failed to parse chunk:", e);
+          }
+        },
+        // onComplete
+        () => {
+          setIsLoading(false);
+        },
+        // onError
+        (error: Error) => {
+          console.error("Streaming error:", error);
+          setIsLoading(false);
+          toast({
+            title: "오류",
+            description: "메시지 전송에 실패했습니다.",
+            variant: "destructive",
+          });
+        }
+      );
+    } catch (error) {
+      console.error("Failed to send message:", error);
       setIsLoading(false);
-    }, 1500);
+      toast({
+        title: "오류",
+        description: "메시지 전송에 실패했습니다.",
+        variant: "destructive",
+      });
+    }
   };
 
   const quickQuestions = [
@@ -133,7 +208,13 @@ const Chat = () => {
                     <p className="text-sm font-medium text-muted-foreground">관련 정책</p>
                     <div className="grid gap-3">
                       {message.policies.map((policy) => (
-                        <PolicyCard key={policy.id} {...policy} />
+                        <PolicyCard
+                          key={policy.faqId}
+                          id={policy.faqId.toString()}
+                          title={policy.faqQuestion}
+                          category={policy.categoryName}
+                          summary={policy.faqAnswer}
+                        />
                       ))}
                     </div>
                   </div>
@@ -171,6 +252,7 @@ const Chat = () => {
                   size="sm"
                   onClick={() => handleSend(question)}
                   className="text-xs"
+                  disabled={isLoading}
                 >
                   {question}
                 </Button>

@@ -1,36 +1,91 @@
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ExternalLink, ArrowLeft, Users, Calendar, DollarSign, FileText } from "lucide-react";
+import { ExternalLink, ArrowLeft, FileText } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { getAllFaqs, FaqResponse } from "@/lib/api";
 
 const PolicyDetail = () => {
   const { id } = useParams();
+  const [policy, setPolicy] = useState<FaqResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
-  // Mock data
-  const policy = {
-    id: "2",
-    title: "전세자금대출",
-    category: "주거",
-    summary: "무주택 청년을 위한 저금리 전세자금대출 지원",
-    description:
-      "주택도시기금을 재원으로 하여 무주택 세대주의 주거안정을 위해 전세자금을 저리로 지원하는 상품입니다.",
-    target: ["무주택 세대주", "연소득 5천만원 이하", "부부합산 순자산 3.45억원 이하"],
-    period: "상시 신청 가능",
-    amount: "수도권: 최대 3억원\n지방: 최대 2억원",
-    rate: "연 1.2% ~ 2.7%",
-    application: "주택도시기금 포털 또는 취급은행 방문 신청",
-    externalLink: "https://nhuf.molit.go.kr",
-  };
+  useEffect(() => {
+    const loadPolicy = async () => {
+      try {
+        setLoading(true);
+        // 모든 FAQ를 가져와서 해당 ID의 FAQ를 찾음
+        const allFaqs = await getAllFaqs();
+        const foundPolicy = allFaqs.find(
+          (faq) => faq.faqId.toString() === id
+        );
+
+        if (foundPolicy) {
+          setPolicy(foundPolicy);
+        } else {
+          toast({
+            title: "오류",
+            description: "정책을 찾을 수 없습니다.",
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
+        console.error("Failed to load policy:", error);
+        toast({
+          title: "오류",
+          description: "정책을 불러오는데 실패했습니다.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      loadPolicy();
+    }
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container max-w-4xl px-4 py-8">
+          <div className="flex items-center justify-center h-64">
+            <p className="text-muted-foreground">정책 정보를 불러오는 중...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (!policy) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container max-w-4xl px-4 py-8">
+          <div className="flex flex-col items-center justify-center h-64 space-y-4">
+            <p className="text-muted-foreground">정책을 찾을 수 없습니다.</p>
+            <Link to="/categories">
+              <Button>카테고리로 돌아가기</Button>
+            </Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
 
       <main className="container max-w-4xl px-4 py-8 space-y-6">
-        <Link to="/chat">
+        <Link to="/categories">
           <Button variant="ghost" size="sm" className="mb-4">
             <ArrowLeft className="w-4 h-4 mr-2" />
             돌아가기
@@ -39,10 +94,9 @@ const PolicyDetail = () => {
 
         <div className="space-y-2">
           <Badge variant="secondary" className="mb-2">
-            {policy.category}
+            {policy.categoryName}
           </Badge>
-          <h1 className="text-3xl font-bold text-foreground">{policy.title}</h1>
-          <p className="text-lg text-muted-foreground">{policy.summary}</p>
+          <h1 className="text-3xl font-bold text-foreground">{policy.faqQuestion}</h1>
         </div>
 
         <Separator />
@@ -51,76 +105,44 @@ const PolicyDetail = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary" />
-              정책 개요
+              정책 상세 정보
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">{policy.description}</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-primary" />
-              지원 대상
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2">
-              {policy.target.map((item, index) => (
-                <li key={index} className="flex items-start gap-2">
-                  <span className="text-primary mt-1">•</span>
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-primary" />
-              신청 기간
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">{policy.period}</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <DollarSign className="w-5 h-5 text-primary" />
-              지원 내용
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div>
-              <p className="text-sm font-medium mb-1">대출 한도</p>
-              <p className="text-muted-foreground whitespace-pre-line">{policy.amount}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium mb-1">대출 금리</p>
-              <p className="text-muted-foreground">{policy.rate}</p>
+            <div className="prose prose-sm max-w-none">
+              <div className="whitespace-pre-wrap text-muted-foreground">
+                {policy.faqAnswer}
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>신청 방법</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground mb-4">{policy.application}</p>
-            <Button className="w-full" asChild>
-              <a href={policy.externalLink} target="_blank" rel="noopener noreferrer">
-                신청 사이트 바로가기
-                <ExternalLink className="w-4 h-4 ml-2" />
-              </a>
-            </Button>
+        {policy.faqDetailUrl && (
+          <Card>
+            <CardHeader>
+              <CardTitle>추가 정보</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground mb-4">
+                자세한 내용은 공식 사이트에서 확인하세요.
+              </p>
+              <Button className="w-full" asChild>
+                <a href={policy.faqDetailUrl} target="_blank" rel="noopener noreferrer">
+                  공식 사이트 바로가기
+                  <ExternalLink className="w-4 h-4 ml-2" />
+                </a>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card className="bg-muted/50">
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground text-center">
+              이 정보는 {new Date(policy.faqCreatedAt).toLocaleDateString("ko-KR")} 기준입니다.
+              <br />
+              최신 정보는 공식 사이트에서 확인해주세요.
+            </p>
           </CardContent>
         </Card>
       </main>
