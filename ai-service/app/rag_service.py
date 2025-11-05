@@ -10,6 +10,8 @@ TODO:
 
 import os
 import time
+import json
+import re
 from glob import glob
 from typing import List, Dict, Optional
 from langchain_upstage import UpstageEmbeddings
@@ -238,14 +240,21 @@ class RAGService:
             
             logger.info(f"PDF 파일 {len(existing_files)}개 발견")
             
-            # PDF 로드
+            # PDF 로드 (메타데이터 포함)
             documents = []
             for file_path in existing_files:
                 try:
                     loader = PyPDFLoader(file_path)
                     docs = loader.load()
+                    
+                    # 각 문서에 메타데이터 추가
+                    metadata = self.extract_metadata(file_path)
+                    for doc in docs:
+                        # 기존 메타데이터와 새 메타데이터 병합
+                        doc.metadata.update(metadata)
+                    
                     documents.extend(docs)
-                    logger.info(f"로드 완료: {os.path.basename(file_path)}")
+                    logger.info(f"로드 완료: {os.path.basename(file_path)} (정책: {metadata.get('policy_name', 'N/A')}, 유형: {metadata.get('doc_type', 'N/A')})")
                 except Exception as e:
                     logger.error(f"파일 로드 실패 {file_path}: {e}")
             
@@ -339,6 +348,146 @@ class RAGService:
         if not docs:
             return ""
         return "\n\n".join([doc.page_content for doc in docs])
+    
+    def load_mapping_table(self, mapping_file: Optional[str] = None) -> dict:
+        """
+        매핑 테이블 JSON 파일을 로드합니다.
+        
+        Args:
+            mapping_file: 매핑 테이블 JSON 파일 경로 (기본값: data/documents/policy_mapping.json)
+        
+        Returns:
+            매핑 테이블 딕셔너리
+        """
+        if mapping_file is None:
+            # 상대 경로를 절대 경로로 변환
+            mapping_file = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                "data", "documents", "policy_mapping.json"
+            )
+            # Docker 컨테이너 내부 경로도 시도
+            if not os.path.exists(mapping_file):
+                mapping_file = "/app/data/documents/policy_mapping.json"
+        
+        try:
+            with open(mapping_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            logger.warning(f"⚠️  매핑 테이블 파일을 찾을 수 없습니다: {mapping_file}")
+            logger.warning("   → 기본 매핑 테이블을 사용합니다.")
+            return {
+                "policy_mapping": {},
+                "domain_mapping": {
+                    "housing": "주거",
+                    "finance": "금융",
+                    "career": "취업",
+                    "general": "일반"
+                }
+            }
+        except json.JSONDecodeError as e:
+            logger.error(f"⚠️  매핑 테이블 JSON 파싱 오류: {e}")
+            return {
+                "policy_mapping": {},
+                "domain_mapping": {
+                    "housing": "주거",
+                    "finance": "금융",
+                    "career": "취업",
+                    "general": "일반"
+                }
+            }
+    
+    def extract_metadata(self, file_path: str) -> dict:
+        """
+        파일 경로에서 메타데이터를 추출합니다.
+        
+        PDF_STORAGE_GUIDE.md의 규칙에 따라:
+        - 도메인: 폴더명 (housing, finance, career, general)
+        - 정책명: 폴더명에서 추출 (예: 01-청년일자리도약장려금 -> 청년일자리도약장려금)
+        - 문서유형: 파일명에서 추출 (예: 보도자료.pdf -> 보도자료)
+        
+        Args:
+            file_path: PDF 파일 경로
+            예) /app/data/documents/career/01-청년일자리도약장려금/보도자료.pdf
+            또는 data/documents/career/01-청년일자리도약장려금/보도자료.pdf
+        
+        Returns:
+            메타데이터 딕셔너리
+        """
+        try:
+            # 매핑 테이블 로드
+            mapping = self.load_mapping_table()
+            policy_mapping = mapping.get("policy_mapping", {})
+            domain_mapping = mapping.get("domain_mapping", {
+                "housing": "주거",
+                "finance": "금융",
+                "career": "취업",
+                "general": "일반"
+            })
+            
+            # 경로 정규화 (Windows 경로 처리)
+            normalized_path = file_path.replace("\\", "/")
+            
+            # 도메인 추출 (경로에서 housing, finance, career, general 찾기)
+            domain = "general"
+            domain_kr = "일반"
+            for eng, kor in domain_mapping.items():
+                if f"/{eng}/" in normalized_path or normalized_path.startswith(f"{eng}/"):
+                    domain = eng
+                    domain_kr = kor
+                    break
+            
+            # 정책명 추출 (폴더명에서)
+            # 예: /app/data/documents/career/01-청년일자리도약장려금/보도자료.pdf
+            # -> 01-청년일자리도약장려금 추출
+            policy_key = None
+            policy_name = "일반 정책"
+            
+            # 폴더명 패턴 찾기: 숫자-정책명 형식
+            pattern = r'(\d{2})-([^/]+)'
+            match = re.search(pattern, normalized_path)
+            
+            if match:
+                policy_folder_name = match.group(2)  # "청년일자리도약장려금"
+                policy_key = policy_folder_name
+                
+                # 매핑 테이블에서 정식 명칭 찾기
+                if policy_folder_name in policy_mapping:
+                    policy_name = policy_mapping[policy_folder_name]
+                else:
+                    # 매핑 테이블에 없으면 폴더명을 그대로 사용 (공백 추가 시도)
+                    policy_name = policy_folder_name.replace("청년", "청년 ").replace("일자리", " 일자리")
+                    logger.debug(f"매핑 테이블에 없는 정책명: {policy_folder_name}, 폴더명을 그대로 사용")
+            else:
+                logger.warning(f"정책명 폴더 패턴을 찾을 수 없습니다: {file_path}")
+            
+            # 문서 유형 추출 (파일명에서)
+            filename = os.path.basename(file_path)
+            # 확장자 제거
+            doc_type = filename.replace('.pdf', '').replace('.PDF', '')
+            
+            # 메타데이터 구성
+            metadata = {
+                "source": file_path,              # 원본 파일 경로
+                "domain": domain,                 # 도메인 (영어)
+                "domain_kr": domain_kr,           # 도메인 (한국어)
+                "policy_name": policy_name,       # 정식 정책명
+                "policy_key": policy_key,         # 정책 키 (폴더명)
+                "doc_type": doc_type              # 문서 유형 (파일명)
+            }
+            
+            return metadata
+            
+        except Exception as e:
+            logger.error(f"메타데이터 추출 실패: {file_path} - {e}")
+            # 기본 메타데이터 반환
+            return {
+                "source": file_path,
+                "domain": "general",
+                "domain_kr": "일반",
+                "policy_name": "일반 정책",
+                "policy_key": None,
+                "doc_type": os.path.basename(file_path).replace('.pdf', '').replace('.PDF', '')
+            }
     
     def add_documents(self, documents: list) -> tuple:
         """
@@ -522,10 +671,17 @@ class RAGService:
                     logger.info(f"  [{i}/{len(new_pdf_files)}] 로딩 중: {os.path.basename(pdf_file)}")
                     loader = PyPDFLoader(pdf_file)
                     docs = loader.load()
+                    
+                    # 각 문서에 메타데이터 추가
+                    metadata = self.extract_metadata(pdf_file)
+                    for doc in docs:
+                        # 기존 메타데이터와 새 메타데이터 병합
+                        doc.metadata.update(metadata)
+                    
                     chunks = self.text_splitter.split_documents(docs)
                     new_documents.extend(chunks)
                     loaded_count += 1
-                    logger.info(f"  ✅ 완료: {len(chunks)}개 청크 생성")
+                    logger.info(f"  ✅ 완료: {len(chunks)}개 청크 생성 (정책: {metadata.get('policy_name', 'N/A')}, 유형: {metadata.get('doc_type', 'N/A')})")
                 except Exception as e:
                     logger.error(f"  ❌ 실패: {os.path.basename(pdf_file)} - {e}")
             
