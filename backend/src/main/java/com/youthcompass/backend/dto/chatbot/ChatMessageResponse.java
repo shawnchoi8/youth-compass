@@ -30,6 +30,9 @@ public class ChatMessageResponse {
     /** 메시지 생성 일시 */
     private LocalDateTime messageCreatedAt;
 
+    /** 웹 검색 출처 (JSON 문자열) */
+    private String messageSources;
+
     /**
      * Message 엔티티로부터 ChatMessageResponse 객체를 생성합니다.
      * @param message Message 엔티티
@@ -40,7 +43,8 @@ public class ChatMessageResponse {
             message.getMessageId(),
             message.getMessageContent(),
             message.getMessageRole().name(),
-            message.getMessageCreatedAt()
+            message.getMessageCreatedAt(),
+            message.getMessageSources()
         );
     }
 }

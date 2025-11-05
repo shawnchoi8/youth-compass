@@ -41,6 +41,7 @@ export interface ChatMessageResponse {
   messageContent: string;
   messageRole: "USER" | "AI";
   messageCreatedAt: string;
+  messageSources?: string; // JSON 문자열
 }
 
 export interface SendMessageRequest {

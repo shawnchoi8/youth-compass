@@ -29,6 +29,7 @@ class GraphState(TypedDict):
     relevance: Annotated[str, "Relevance"]  # 관련성 체크 결과 (yes/no)
     search_source: Annotated[str, "SearchSource"]  # 정보 출처 (pdf/web)
     user_profile: Annotated[dict, "UserProfile"]  # 사용자 프로필
+    sources: Annotated[list, "Sources"]  # 웹 검색 출처 (제목, URL)
 
 
 # 청년 정책 전문 프롬프트
@@ -243,7 +244,7 @@ class GraphService:
         try:
             # 검색 쿼리 최적화 (청년 정책 키워드 추가)
             enhanced_query = f"청년 {question}" if "청년" not in question else question
-            
+
             # Tavily 검색 수행 (동기 함수를 비동기로 실행)
             import asyncio
             loop = asyncio.get_event_loop()
@@ -251,15 +252,22 @@ class GraphService:
                 None,
                 lambda: self.tavily_client.search(query=enhanced_query, max_results=5)
             )
-            
-            # 결과 포맷팅
+
+            # 결과 포맷팅 및 출처 URL 저장
             context = ""
+            sources = []
             if search_results and "results" in search_results:
                 for result in search_results["results"][:3]:
                     context += f"{result.get('content', '')}\n\n"
-            
-            logger.info("웹 검색 완료")
-            return GraphState(context=context, search_source="web")
+                    # 출처 정보 저장
+                    sources.append({
+                        "title": result.get('title', 'Untitled'),
+                        "url": result.get('url', ''),
+                        "score": result.get('score', 0)
+                    })
+
+            logger.info(f"웹 검색 완료 (출처 {len(sources)}개)")
+            return GraphState(context=context, search_source="web", sources=sources)
             
         except Exception as e:
             logger.error(f"웹 검색 실패: {e}")
@@ -418,7 +426,7 @@ class GraphService:
             # 설정
             config = {"configurable": {"thread_id": thread_id}}
             
-            # LangGraph 워크플로우 실행 
+            # LangGraph 워크플로우 실행
             # 하지만 llm_answer 노드 완료를 기다리지 않고, 관련성 체크 완료 후 즉시 스트리밍 시작
             full_answer = ""
             search_source = "unknown"
@@ -426,6 +434,7 @@ class GraphService:
             context = ""
             relevance = "yes"
             streaming_started = False
+            sources = []  # 웹 검색 출처 저장
             
             # LangGraph 워크플로우를 실행하여 필요한 정보 수집
             async for event in self.app.astream(inputs, config):
@@ -508,7 +517,20 @@ class GraphService:
                         yield {"type": "status", "content": "웹 검색 중..."}
                         context = node_output.get("context", "")
                         search_source = node_output.get("search_source", "web")
-                        
+                        sources = node_output.get("sources", [])
+
+                        logger.info(f"🔍 웹 검색 완료: sources 개수 = {len(sources)}")
+                        if sources:
+                            logger.info(f"📤 Sources 전송: {sources}")
+
+                        # 웹 검색 출처 정보 전송
+                        if sources:
+                            yield {
+                                "type": "sources",
+                                "sources": sources
+                            }
+                            logger.info(f"✅ Sources yield 완료")
+
                         # 웹 검색 완료 후 스트리밍 시작
                         if not streaming_started:
                             streaming_started = True
@@ -658,11 +680,17 @@ class GraphService:
                 pass  # 메모리 저장 실패는 무시
             
             # 완료 신호
-            yield {
+            done_event = {
                 "type": "done",
                 "search_source": search_source,
                 "full_response": full_answer
             }
+
+            # 웹 검색 출처가 있으면 포함
+            if sources:
+                done_event["sources"] = sources
+
+            yield done_event
             
             logger.info("스트리밍 답변 생성 완료 (LangGraph 사용)")
             

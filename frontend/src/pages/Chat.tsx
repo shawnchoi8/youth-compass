@@ -19,12 +19,19 @@ import {
   ConversationResponse,
 } from "@/lib/api";
 
+interface Source {
+  title: string;
+  url: string;
+  score: number;
+}
+
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: string;
   policies?: FaqResponse[];
+  sources?: Source[];
 }
 
 const Chat = () => {
@@ -104,15 +111,28 @@ const Chat = () => {
       const history = await getConversationHistory(convId);
 
       // 메시지 변환
-      const loadedMessages: Message[] = history.messages.map((msg) => ({
-        id: msg.messageId.toString(),
-        role: msg.messageRole === "USER" ? "user" : "assistant",
-        content: msg.messageContent,
-        timestamp: new Date(msg.messageCreatedAt).toLocaleTimeString("ko-KR", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      }));
+      const loadedMessages: Message[] = history.messages.map((msg) => {
+        // messageSources (JSON 문자열)을 파싱
+        let sources: Source[] | undefined;
+        if (msg.messageSources) {
+          try {
+            sources = JSON.parse(msg.messageSources);
+          } catch (e) {
+            console.error("Failed to parse sources:", e);
+          }
+        }
+
+        return {
+          id: msg.messageId.toString(),
+          role: msg.messageRole === "USER" ? "user" : "assistant",
+          content: msg.messageContent,
+          timestamp: new Date(msg.messageCreatedAt).toLocaleTimeString("ko-KR", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          sources,
+        };
+      });
 
       setMessages(loadedMessages);
     } catch (error) {
@@ -221,6 +241,7 @@ const Chat = () => {
     let aiResponse = "";
     const aiMessageId = (Date.now() + 1).toString();
     let messageAdded = false; // AI 메시지 추가 여부 플래그
+    let sources: Source[] = []; // 웹 검색 출처
 
     try {
       await sendMessageStream(
@@ -232,6 +253,13 @@ const Chat = () => {
         (chunk: string) => {
           try {
             const data = JSON.parse(chunk);
+            console.log("📦 Received chunk:", data);
+
+            // 웹 검색 출처 수신
+            if (data.type === "sources" && data.sources) {
+              console.log("🔗 Sources received:", data.sources);
+              sources = data.sources;
+            }
 
             // AI 서비스가 보내는 "content" 타입 처리
             if (data.type === "content" && data.content) {
@@ -248,6 +276,7 @@ const Chat = () => {
                     hour: "2-digit",
                     minute: "2-digit",
                   }),
+                  sources: sources.length > 0 ? sources : undefined,
                 };
                 setMessages((prev) => [...prev, aiMessage]);
               } else {
@@ -255,7 +284,7 @@ const Chat = () => {
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === aiMessageId
-                      ? { ...msg, content: aiResponse }
+                      ? { ...msg, content: aiResponse, sources: sources.length > 0 ? sources : undefined }
                       : msg
                   )
                 );
@@ -360,6 +389,7 @@ const Chat = () => {
                   role={message.role}
                   content={message.content}
                   timestamp={message.timestamp}
+                  sources={message.sources}
                 />
                 {message.policies && message.policies.length > 0 && (
                   <div className="space-y-2 ml-11">
