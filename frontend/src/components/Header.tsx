@@ -1,61 +1,45 @@
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Compass, User } from "lucide-react";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import type { User as SupabaseUser } from "@supabase/supabase-js";
 
 const Header = () => {
-  const location = useLocation();
   const navigate = useNavigate();
-  const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>("");
 
-  useEffect(() => {
-    // Check current session
-    supabase.auth.getSession()
-      .then(({ data: { session } }) => {
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          fetchUserName(session.user.id);
-        }
-      })
-      .catch((error) => {
-        console.warn('Supabase auth not available:', error);
-      });
+  // localStorage에서 로그인 정보 읽기
+  const checkLoginStatus = () => {
+    const storedUserId = localStorage.getItem("userId");
+    const storedUserName = localStorage.getItem("userName");
 
-    // Listen for auth changes
-    try {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          fetchUserName(session.user.id);
-        } else {
-          setUserName("");
-        }
-      });
-
-      return () => subscription.unsubscribe();
-    } catch (error) {
-      console.warn('Supabase auth listener not available:', error);
-    }
-  }, []);
-
-  const fetchUserName = async (userId: string) => {
-    try {
-      const { data } = await supabase
-        .from("profiles")
-        .select("name")
-        .eq("user_id", userId)
-        .single();
-
-      if (data) {
-        setUserName(data.name);
-      }
-    } catch (error) {
-      console.warn('Could not fetch user name:', error);
-    }
+    setUserId(storedUserId);
+    setUserName(storedUserName || "");
   };
+
+  useEffect(() => {
+    // 컴포넌트 마운트 시 로그인 상태 확인
+    checkLoginStatus();
+
+    // storage 이벤트 리스너 (다른 탭에서 로그인/로그아웃 시 동기화)
+    const handleStorageChange = () => {
+      checkLoginStatus();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    // 같은 탭에서의 변경을 감지하기 위한 커스텀 이벤트
+    const handleLoginChange = () => {
+      checkLoginStatus();
+    };
+
+    window.addEventListener('loginStatusChanged', handleLoginChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('loginStatusChanged', handleLoginChange);
+    };
+  }, []);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -71,7 +55,7 @@ const Header = () => {
         </Link>
 
         <div className="flex items-center gap-3">
-          {user ? (
+          {userId ? (
             <>
               {userName && (
                 <span className="text-sm font-medium text-foreground">
@@ -85,8 +69,8 @@ const Header = () => {
               </Link>
             </>
           ) : (
-            <Button 
-              variant="default" 
+            <Button
+              variant="default"
               size="sm"
               onClick={() => navigate("/auth")}
             >

@@ -7,20 +7,20 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { LogOut } from "lucide-react";
+import { getUserInfo, updateUserInfo } from "@/lib/api";
 
 const MyPage = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     age: "",
-    income: "",
+    salary: "",
     assets: "",
-    region: "",
+    residence: "",
     useAsDefault: true,
   });
 
@@ -29,47 +29,47 @@ const MyPage = () => {
   }, []);
 
   const checkUserAndLoadProfile = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    if (!session) {
+    const storedUserId = localStorage.getItem("userId");
+
+    if (!storedUserId) {
       navigate("/auth");
       return;
     }
 
-    setUserId(session.user.id);
-    await loadProfile(session.user.id);
+    const uid = parseInt(storedUserId);
+    setUserId(uid);
+    await loadProfile(uid);
   };
 
-  const loadProfile = async (uid: string) => {
+  const loadProfile = async (uid: number) => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("user_id", uid)
-      .single();
 
-    setLoading(false);
+    try {
+      const data = await getUserInfo(uid);
 
-    if (error) {
-      console.error("프로필 로드 오류:", error);
-      return;
-    }
-
-    if (data) {
       setFormData({
-        name: data.name || "",
-        age: data.age?.toString() || "",
-        income: data.income || "",
-        assets: data.assets || "",
-        region: data.region || "",
+        name: data.userName || "",
+        age: data.userAge?.toString() || "",
+        salary: data.userSalary?.toString() || "",
+        assets: data.userAssets?.toString() || "",
+        residence: data.userResidence || "",
         useAsDefault: true,
       });
+    } catch (error) {
+      console.error("프로필 로드 오류:", error);
+      toast({
+        title: "오류",
+        description: "프로필 정보를 불러오는데 실패했습니다",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!userId) {
       toast({
         title: "오류",
@@ -79,39 +79,45 @@ const MyPage = () => {
       return;
     }
 
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        name: formData.name,
-        age: formData.age ? parseInt(formData.age) : null,
-        income: formData.income || null,
-        assets: formData.assets || null,
-        region: formData.region || null,
-      })
-      .eq("user_id", userId);
+    try {
+      const updateData = {
+        userName: formData.name,
+        userAge: formData.age ? parseInt(formData.age) : undefined,
+        userSalary: formData.salary ? parseFloat(formData.salary) : undefined,
+        userAssets: formData.assets ? parseFloat(formData.assets) : undefined,
+        userResidence: formData.residence || undefined,
+      };
 
-    if (error) {
+      await updateUserInfo(userId, updateData);
+
+      // localStorage의 userName도 업데이트
+      localStorage.setItem("userName", formData.name);
+      window.dispatchEvent(new Event('loginStatusChanged'));
+
+      toast({
+        title: "저장 완료",
+        description: "내 정보가 성공적으로 저장되었습니다.",
+      });
+    } catch (error) {
       toast({
         title: "저장 실패",
         description: "정보 저장 중 오류가 발생했습니다",
         variant: "destructive",
       });
-      return;
     }
-
-    toast({
-      title: "저장 완료",
-      description: "내 정보가 성공적으로 저장되었습니다.",
-    });
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
+  const handleLogout = () => {
+    localStorage.removeItem("userId");
+    localStorage.removeItem("userName");
+    window.dispatchEvent(new Event('loginStatusChanged'));
+
     toast({
       title: "로그아웃",
       description: "로그아웃되었습니다",
     });
-    navigate("/");
+
+    navigate("/auth");
   };
 
   const handleChange = (field: string, value: string | boolean) => {
@@ -168,18 +174,19 @@ const MyPage = () => {
                   </Label>
                   <Input
                     id="name"
+                    name="name"
                     value={formData.name}
                     onChange={(e) => handleChange("name", e.target.value)}
                     placeholder="이름을 입력하세요"
+                    required
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="age">
-                    나이 <span className="text-destructive">*</span>
-                  </Label>
+                  <Label htmlFor="age">나이</Label>
                   <Input
                     id="age"
+                    name="age"
                     type="number"
                     value={formData.age}
                     onChange={(e) => handleChange("age", e.target.value)}
@@ -191,12 +198,14 @@ const MyPage = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="income">연봉</Label>
+                  <Label htmlFor="salary">월 소득</Label>
                   <Input
-                    id="income"
-                    value={formData.income}
-                    onChange={(e) => handleChange("income", e.target.value)}
-                    placeholder="예: 3200만원"
+                    id="salary"
+                    name="salary"
+                    type="number"
+                    value={formData.salary}
+                    onChange={(e) => handleChange("salary", e.target.value)}
+                    placeholder="예: 3000000 (단위: 원)"
                   />
                   <p className="text-xs text-muted-foreground">
                     소득 기준 정책 추천에 활용됩니다
@@ -204,12 +213,14 @@ const MyPage = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="assets">재산</Label>
+                  <Label htmlFor="assets">총 자산</Label>
                   <Input
                     id="assets"
+                    name="assets"
+                    type="number"
                     value={formData.assets}
                     onChange={(e) => handleChange("assets", e.target.value)}
-                    placeholder="예: 4500만원"
+                    placeholder="예: 45000000 (단위: 원)"
                   />
                   <p className="text-xs text-muted-foreground">
                     자산 기준 정책 추천에 활용됩니다
@@ -217,13 +228,12 @@ const MyPage = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="region">
-                    거주 지역 <span className="text-destructive">*</span>
-                  </Label>
+                  <Label htmlFor="residence">거주 지역</Label>
                   <Input
-                    id="region"
-                    value={formData.region}
-                    onChange={(e) => handleChange("region", e.target.value)}
+                    id="residence"
+                    name="residence"
+                    value={formData.residence}
+                    onChange={(e) => handleChange("residence", e.target.value)}
                     placeholder="예: 서울시 마포구"
                   />
                   <p className="text-xs text-muted-foreground">

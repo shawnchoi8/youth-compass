@@ -28,4 +28,9 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
      * 특정 대화방의 메시지 개수
      */
     long countByConversationConversationId(Long conversationId);
+
+    /**
+     * 특정 대화방의 모든 메시지 삭제
+     */
+    void deleteByConversationConversationId(Long conversationId);
 }
