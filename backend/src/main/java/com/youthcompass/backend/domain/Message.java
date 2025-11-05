@@ -41,6 +41,9 @@ public class Message {
     @Column(name = "message_created_at", updatable = false)
     private LocalDateTime messageCreatedAt;
 
+    @Column(name = "message_sources", columnDefinition = "TEXT")
+    private String messageSources; // JSON 형식으로 저장: [{"title":"...", "url":"...", "score":0.5}, ...]
+
     public enum MessageRole {
         USER, AI
     }

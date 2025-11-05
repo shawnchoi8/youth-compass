@@ -236,6 +236,8 @@ public class ChatbotService {
 
         // AI 응답을 축적할 StringBuilder (content 청크들을 모음)
         final StringBuilder responseAccumulator = new StringBuilder();
+        // 웹 검색 출처를 저장할 변수
+        final StringBuilder sourcesAccumulator = new StringBuilder();
 
         // AI 서비스 스트리밍 호출
         return webClient.post()
@@ -255,24 +257,32 @@ public class ChatbotService {
                 return dataLine;
             })
             .doOnNext(chunk -> {
-                // content 타입의 청크만 축적
                 try {
-                    if (chunk.contains("\"type\"") && chunk.contains("\"content\"")) {
-                        JsonNode jsonNode = objectMapper.readTree(chunk);
-                        if ("content".equals(jsonNode.get("type").asText()) && jsonNode.has("content")) {
-                            String content = jsonNode.get("content").asText();
-                            responseAccumulator.append(content);
-                        }
+                    JsonNode jsonNode = objectMapper.readTree(chunk);
+                    String type = jsonNode.get("type").asText();
+
+                    // content 타입의 청크 축적
+                    if ("content".equals(type) && jsonNode.has("content")) {
+                        String content = jsonNode.get("content").asText();
+                        responseAccumulator.append(content);
+                    }
+
+                    // sources 타입의 청크 저장
+                    if ("sources".equals(type) && jsonNode.has("sources")) {
+                        sourcesAccumulator.append(jsonNode.get("sources").toString());
+                        System.out.println("✅ Sources captured for DB: " + sourcesAccumulator.toString());
                     }
                 } catch (Exception e) {
-                    // JSON 파싱 실패는 무시 (content 아닌 청크들)
+                    // JSON 파싱 실패는 무시
                 }
             })
             .doOnComplete(() -> {
                 System.out.println("=== Stream completed ===");
                 // 스트림 완료 후 축적된 응답을 DB에 저장
                 String accumulatedResponse = responseAccumulator.toString();
+                String accumulatedSources = sourcesAccumulator.toString();
                 System.out.println("Accumulated response length: " + accumulatedResponse.length());
+                System.out.println("Accumulated sources: " + (accumulatedSources.isEmpty() ? "none" : accumulatedSources));
 
                 if (accumulatedResponse != null && !accumulatedResponse.isEmpty()) {
                     // 새로운 트랜잭션 시작 (Reactive 스트림은 별도 스레드에서 실행됨)
@@ -285,11 +295,13 @@ public class ChatbotService {
                             .conversation(conversation)
                             .messageContent(accumulatedResponse)
                             .messageRole(Message.MessageRole.AI)
+                            .messageSources(accumulatedSources.isEmpty() ? null : accumulatedSources)
                             .build();
                         messageRepository.save(aiMessage);
                         transactionManager.commit(status);
                         System.out.println("✅ AI response saved to DB!");
                         System.out.println("Length: " + accumulatedResponse.length() + " chars");
+                        System.out.println("Sources: " + (accumulatedSources.isEmpty() ? "none" : "saved"));
                         System.out.println("Preview: " + accumulatedResponse.substring(0, Math.min(100, accumulatedResponse.length())) + "...");
                     } catch (Exception e) {
                         transactionManager.rollback(status);
