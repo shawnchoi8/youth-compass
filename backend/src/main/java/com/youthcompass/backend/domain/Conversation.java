@@ -36,4 +36,12 @@ public class Conversation {
     @CreationTimestamp
     @Column(name = "conversation_created_at", updatable = false)
     private LocalDateTime conversationCreatedAt;
+
+    /**
+     * 대화 제목 업데이트
+     * @param newTitle 새로운 제목
+     */
+    public void updateTitle(String newTitle) {
+        this.conversationTitle = newTitle;
+    }
 }
