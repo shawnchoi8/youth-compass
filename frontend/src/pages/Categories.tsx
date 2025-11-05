@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import PolicyCard from "@/components/PolicyCard";
 import { Button } from "@/components/ui/button";
@@ -9,112 +9,104 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { useToast } from "@/hooks/use-toast";
+import {
+  getActiveCategories,
+  getFaqsByCategory,
+  CategoryResponse,
+  FaqResponse,
+} from "@/lib/api";
+
+// 아이콘 매핑
+const categoryIconMap: Record<string, any> = {
+  "일자리": Briefcase,
+  "주거": Home,
+  "교육": GraduationCap,
+  "금융": Coins,
+  "건강": Heart,
+  "문화": Palette,
+};
+
+const categoryColorMap: Record<string, string> = {
+  "일자리": "text-orange-500",
+  "주거": "text-blue-500",
+  "교육": "text-green-500",
+  "금융": "text-yellow-500",
+  "건강": "text-red-500",
+  "문화": "text-purple-500",
+};
+
+interface CategoryWithFaqs extends CategoryResponse {
+  faqs: FaqResponse[];
+  icon: any;
+  color: string;
+}
 
 const Categories = () => {
-  const categories = [
-    {
-      name: "일자리",
-      icon: Briefcase,
-      color: "text-orange-500",
-      policies: [
-        {
-          id: "3",
-          title: "청년일자리도약장려금",
-          category: "일자리",
-          deadline: "상시모집",
-          summary: "중소·중견기업 취업 청년에게 최대 1,200만원 지원",
-        },
-        {
-          id: "4",
-          title: "취업성공패키지",
-          category: "일자리",
-          summary: "취업을 원하는 청년에게 취업상담부터 취업알선까지 지원",
-        },
-      ],
-    },
-    {
-      name: "주거",
-      icon: Home,
-      color: "text-blue-500",
-      policies: [
-        {
-          id: "2",
-          title: "전세자금대출",
-          category: "주거",
-          summary: "무주택 청년을 위한 저금리 전세자금대출 지원",
-        },
-        {
-          id: "5",
-          title: "청년전용 버팀목전세자금",
-          category: "주거",
-          deadline: "2025년 12월 31일",
-          summary: "만 19~34세 청년 무주택자를 위한 저금리 전세자금대출",
-        },
-      ],
-    },
-    {
-      name: "교육",
-      icon: GraduationCap,
-      color: "text-green-500",
-      policies: [
-        {
-          id: "6",
-          title: "국가장학금",
-          category: "교육",
-          deadline: "학기별 신청",
-          summary: "소득수준에 연계하여 경제적으로 어려운 학생들에게 보편적으로 지원",
-        },
-      ],
-    },
-    {
-      name: "금융",
-      icon: Coins,
-      color: "text-yellow-500",
-      policies: [
-        {
-          id: "1",
-          title: "청년도약계좌",
-          category: "금융",
-          deadline: "2025년 12월 31일",
-          summary: "월 최대 70만원 납입 시 정부지원금 + 이자로 5년 후 최대 5,000만원 목돈 마련",
-        },
-      ],
-    },
-    {
-      name: "건강",
-      icon: Heart,
-      color: "text-red-500",
-      policies: [
-        {
-          id: "7",
-          title: "청년 건강검진",
-          category: "건강",
-          summary: "만 20세~39세 청년을 위한 무료 건강검진 프로그램",
-        },
-      ],
-    },
-    {
-      name: "문화",
-      icon: Palette,
-      color: "text-purple-500",
-      policies: [
-        {
-          id: "8",
-          title: "청년문화예술패스",
-          category: "문화",
-          summary: "문화·예술·체육 활동 지원을 위한 월 5만원 포인트 지급",
-        },
-      ],
-    },
-  ];
+  const [categories, setCategories] = useState<CategoryWithFaqs[]>([]);
+  const [openCategories, setOpenCategories] = useState<number[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
-  const [openCategories, setOpenCategories] = useState<string[]>([categories[0].name]);
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        setLoading(true);
+        const categoriesData = await getActiveCategories();
 
-  const toggleCategory = (name: string) => {
+        // 각 카테고리의 FAQ 로드
+        const categoriesWithFaqs = await Promise.all(
+          categoriesData.map(async (category) => {
+            const faqs = await getFaqsByCategory(category.categoryId);
+            return {
+              ...category,
+              faqs,
+              icon: categoryIconMap[category.categoryName] || Briefcase,
+              color: categoryColorMap[category.categoryName] || "text-gray-500",
+            };
+          })
+        );
+
+        setCategories(categoriesWithFaqs);
+        // 첫 번째 카테고리는 기본으로 열기
+        if (categoriesWithFaqs.length > 0) {
+          setOpenCategories([categoriesWithFaqs[0].categoryId]);
+        }
+      } catch (error) {
+        console.error("Failed to load categories:", error);
+        toast({
+          title: "오류",
+          description: "카테고리를 불러오는데 실패했습니다.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadCategories();
+  }, []);
+
+  const toggleCategory = (categoryId: number) => {
     setOpenCategories((prev) =>
-      prev.includes(name) ? prev.filter((c) => c !== name) : [...prev, name]
+      prev.includes(categoryId)
+        ? prev.filter((id) => id !== categoryId)
+        : [...prev, categoryId]
     );
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container max-w-4xl px-4 py-8">
+          <div className="flex items-center justify-center h-64">
+            <p className="text-muted-foreground">카테고리를 불러오는 중...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -132,9 +124,9 @@ const Categories = () => {
           <div className="space-y-3">
             {categories.map((category) => (
               <Collapsible
-                key={category.name}
-                open={openCategories.includes(category.name)}
-                onOpenChange={() => toggleCategory(category.name)}
+                key={category.categoryId}
+                open={openCategories.includes(category.categoryId)}
+                onOpenChange={() => toggleCategory(category.categoryId)}
               >
                 <Card>
                   <CollapsibleTrigger asChild>
@@ -144,20 +136,31 @@ const Categories = () => {
                     >
                       <div className="flex items-center gap-3">
                         <category.icon className={`w-5 h-5 ${category.color}`} />
-                        <span className="font-semibold text-lg">{category.name}</span>
+                        <span className="font-semibold text-lg">{category.categoryName}</span>
+                        <span className="text-sm text-muted-foreground">({category.faqs.length})</span>
                       </div>
                       <ChevronDown
                         className={`w-5 h-5 transition-transform ${
-                          openCategories.includes(category.name) ? "rotate-180" : ""
+                          openCategories.includes(category.categoryId) ? "rotate-180" : ""
                         }`}
                       />
                     </Button>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="px-6 pb-6 space-y-3 pt-2">
-                      {category.policies.map((policy) => (
-                        <PolicyCard key={policy.id} {...policy} />
-                      ))}
+                      {category.faqs.length > 0 ? (
+                        category.faqs.map((faq) => (
+                          <PolicyCard
+                            key={faq.faqId}
+                            id={faq.faqId.toString()}
+                            title={faq.faqQuestion}
+                            category={faq.categoryName}
+                            summary={faq.faqAnswer.substring(0, 100) + "..."}
+                          />
+                        ))
+                      ) : (
+                        <p className="text-sm text-muted-foreground">등록된 FAQ가 없습니다.</p>
+                      )}
                     </div>
                   </CollapsibleContent>
                 </Card>

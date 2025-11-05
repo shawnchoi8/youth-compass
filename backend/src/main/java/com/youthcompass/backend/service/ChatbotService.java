@@ -173,14 +173,21 @@ public class ChatbotService {
      */
     @Transactional
     public Flux<String> sendMessageStream(Long userId, SendMessageRequest request) {
+        System.out.println("=== sendMessageStream called ===");
+        System.out.println("userId: " + userId);
+        System.out.println("conversationId: " + request.getConversationId());
+        System.out.println("message: " + request.getMessage());
+
         // 대화방 조회 및 권한 확인
         Conversation conversation = conversationRepository.findById(request.getConversationId())
             .orElseThrow(() -> new IllegalArgumentException("대화방을 찾을 수 없습니다."));
-        
+
         if (!conversation.getUser().getUserId().equals(userId)) {
             throw new IllegalArgumentException("대화방 접근 권한이 없습니다.");
         }
-        
+
+        System.out.println("Conversation found and authorized");
+
         // 사용자 메시지 저장
         Message userMessage = Message.builder()
                 .conversation(conversation)
@@ -188,7 +195,9 @@ public class ChatbotService {
                 .messageRole(Message.MessageRole.USER)
                 .build();
         messageRepository.save(userMessage);
-        
+
+        System.out.println("User message saved");
+
         // 사용자 프로필 정보 생성
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
@@ -202,7 +211,9 @@ public class ChatbotService {
             String.valueOf(conversation.getConversationId()),
             userProfile
         );
-        
+
+        System.out.println("Calling AI service at: " + aiServiceUrl + "/chat-stream");
+
         // AI 서비스 스트리밍 호출
         return webClient.post()
             .uri(aiServiceUrl + "/chat-stream")
@@ -210,6 +221,18 @@ public class ChatbotService {
             .accept(MediaType.TEXT_EVENT_STREAM)
             .retrieve()
             .bodyToFlux(String.class)
+            .doOnSubscribe(subscription -> {
+                System.out.println("=== WebClient subscribed ===");
+            })
+            .doOnNext(chunk -> {
+                System.out.println("Received chunk from AI: " + chunk.substring(0, Math.min(50, chunk.length())));
+            })
+            .doOnComplete(() -> {
+                System.out.println("=== Stream completed ===");
+            })
+            .doOnError(error -> {
+                System.err.println("=== Stream error: " + error.getMessage() + " ===");
+            })
             .map(dataLine -> {
                 // SSE 형식 파싱: "data: {...}" -> "{...}"
                 if (dataLine.startsWith("data: ")) {
