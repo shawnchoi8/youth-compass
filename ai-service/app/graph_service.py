@@ -19,6 +19,161 @@ import json
 logger = logging.getLogger(__name__)
 
 
+def remove_markdown_formatting(text: str) -> str:
+    """
+    마크다운 형식을 일반 텍스트로 변환
+    
+    Args:
+        text: 마크다운 형식 텍스트
+        
+    Returns:
+        일반 텍스트
+    """
+    import re
+    
+    # ** 볼드 제거
+    text = re.sub(r'\*\*([^\*]+)\*\*', r'\1', text)
+    
+    # * 이탤릭 제거 (단, 리스트 형식은 유지)
+    text = re.sub(r'(?<!\n)\*([^\*\n]+)\*(?!\n)', r'\1', text)
+    
+    # __ 볼드 제거
+    text = re.sub(r'__([^_]+)__', r'\1', text)
+    
+    # _ 이탤릭 제거
+    text = re.sub(r'(?<!\w)_([^_\n]+)_(?!\w)', r'\1', text)
+    
+    # ``` 코드 블록 제거 (코드 내용만 유지)
+    text = re.sub(r'```[^\n]*\n(.*?)```', r'\1', text, flags=re.DOTALL)
+    
+    # ` 인라인 코드 제거
+    text = re.sub(r'`([^`]+)`', r'\1', text)
+    
+    return text
+
+
+def remove_markdown_streaming(text: str) -> str:
+    """
+    스트리밍용 마크다운 제거 (단순 치환)
+    
+    스트리밍은 청크가 작게 쪼개져서 정규식 패턴 매칭이 어렵기 때문에
+    단순히 마크다운 문자를 제거합니다.
+    
+    Args:
+        text: 마크다운이 포함될 수 있는 텍스트
+        
+    Returns:
+        마크다운 문자가 제거된 텍스트
+    """
+    # ** 제거
+    text = text.replace('**', '')
+    
+    # __ 제거
+    text = text.replace('__', '')
+    
+    # ` 제거
+    text = text.replace('`', '')
+    
+    return text
+
+
+def format_user_profile(user_profile: Optional[dict]) -> str:
+    """
+    사용자 프로필 정보를 포맷팅하여 프롬프트에 삽입할 텍스트로 변환
+    
+    Args:
+        user_profile: 사용자 프로필 정보 (name, age, residence, salary, assets, note 등)
+        
+    Returns:
+        포맷팅된 사용자 프로필 텍스트
+    """
+    logger.info(f"🔍 format_user_profile 호출됨: {user_profile}")
+    
+    if not user_profile:
+        logger.warning("⚠️ 사용자 프로필이 없습니다!")
+        return "사용자 프로필 정보: 없음"
+    
+    # 개인정보 동의 여부 확인
+    agree_privacy = user_profile.get('agreePrivacy', False) or user_profile.get('agree_privacy', False)
+    
+    logger.info(f"🔍 개인정보 활용 동의 여부: {agree_privacy}")
+    
+    if not agree_privacy:
+        logger.warning("⚠️ 개인정보 활용 동의하지 않음!")
+        return "사용자 프로필 정보: 사용자가 개인정보 활용에 동의하지 않았습니다. 일반적인 답변을 제공하세요."
+    
+    # 프로필 정보 추출
+    profile_parts = ["사용자 프로필 정보:"]
+    
+    name = user_profile.get('name')
+    if name:
+        profile_parts.append(f"- 이름: {name}님")
+    
+    age = user_profile.get('age')
+    if age:
+        profile_parts.append(f"- 나이: {age}세")
+        # 나이대에 따른 힌트 추가
+        if age < 30:
+            profile_parts.append("  (20대 청년에게 적합한 정책을 우선 추천)")
+        elif age < 35:
+            profile_parts.append("  (30대 초반 청년에게 적합한 정책을 우선 추천)")
+        else:
+            profile_parts.append("  (30대 중후반 청년에게 적합한 정책을 우선 추천)")
+    
+    residence = user_profile.get('residence')
+    if residence:
+        profile_parts.append(f"- 거주지: {residence}")
+        profile_parts.append("  (해당 지역의 지방자치단체 정책이 있다면 함께 안내)")
+    
+    salary = user_profile.get('salary')
+    if salary:
+        # 숫자로 변환 시도
+        try:
+            salary_value = float(salary) if isinstance(salary, (int, float, str)) else None
+            if salary_value:
+                salary_formatted = f"{salary_value:,.0f}원"
+                profile_parts.append(f"- 연봉: {salary_formatted}")
+                # 소득 구간 힌트
+                if salary_value < 30000000:
+                    profile_parts.append("  (저소득층 대상 정책 적극 추천)")
+                elif salary_value < 50000000:
+                    profile_parts.append("  (중저소득층 대상 정책 추천)")
+                else:
+                    profile_parts.append("  (소득 조건이 완화된 정책 중심으로 안내)")
+        except:
+            pass
+    
+    assets = user_profile.get('assets')
+    if assets:
+        try:
+            assets_value = float(assets) if isinstance(assets, (int, float, str)) else None
+            if assets_value:
+                assets_formatted = f"{assets_value:,.0f}원"
+                profile_parts.append(f"- 자산: {assets_formatted}")
+                # 자산 구간 힌트
+                if assets_value < 50000000:
+                    profile_parts.append("  (자산 요건이 낮은 정책 우선 추천)")
+                elif assets_value < 300000000:
+                    profile_parts.append("  (일반 청년 대상 정책 추천)")
+                else:
+                    profile_parts.append("  (자산 조건을 고려하여 해당되는 정책 안내)")
+        except:
+            pass
+    
+    note = user_profile.get('note')
+    if note:
+        profile_parts.append(f"- 참고사항: {note}")
+    
+    # 맞춤형 답변 지침 추가
+    profile_parts.append("\n위 사용자 정보를 바탕으로:")
+    profile_parts.append("1. 사용자의 나이, 소득, 자산 조건에 맞는 정책을 우선 안내하세요.")
+    profile_parts.append("2. 신청 자격 요건을 구체적으로 확인하여 지원 가능 여부를 명확히 알려주세요.")
+    profile_parts.append("3. 여러 정책이 있다면 사용자 상황에 가장 적합한 순서로 추천하세요.")
+    profile_parts.append("4. 사용자를 '님'으로 호칭하여 친근하게 대화하세요.")
+    
+    return "\n".join(profile_parts)
+
+
 # GraphState 정의
 class GraphState(TypedDict):
     """그래프 상태"""
@@ -38,30 +193,45 @@ YOUTH_POLICY_PROMPT = ChatPromptTemplate.from_messages([
         "system",
         """당신은 청년 금융 및 주택 정책 전문 상담사입니다.
 
-**역할**
+[중요한 출력 형식 규칙 - 반드시 준수]
+1. 일반 텍스트로만 답변하세요. 마크다운 문법을 절대 사용하지 마세요.
+   금지: *, **, _, __, `, ```, #, [링크](url) 등
+2. 강조가 필요한 경우:
+   - 큰따옴표 사용: "중요한 내용"
+   - 자연스러운 표현: 특히, 핵심은, 중요합니다 등
+3. 구조화가 필요한 경우:
+   - 숫자 리스트: 1. 항목, 2. 항목
+   - 하이픈: - 항목 (마크다운이 아닌 단순 기호로만)
+4. 모든 텍스트를 완전하고 자연스럽게 작성하세요. 단어나 문장을 생략하지 마세요.
+
+당신의 역할:
 - 청년들의 금융 및 주택 관련 고민을 친절하고 명확하게 해결해주세요.
 - 복잡한 정책을 쉽고 이해하기 쉽게 설명해주세요.
 - 구체적인 신청 조건, 절차, 필요 서류를 안내해주세요.
 
-**답변 원칙**
+답변 원칙:
 1. 제공된 컨텍스트를 기반으로 정확한 정보를 전달합니다.
 2. 신청 자격, 대출 한도, 금리 등 핵심 정보를 빠짐없이 안내합니다.
 3. 여러 정책이 있다면 비교하여 최적의 선택을 도와줍니다.
 4. 불확실한 정보는 추측하지 않고 확인이 필요하다고 안내합니다.
 5. 친근하고 공감하는 톤으로 대화합니다.
+6. [중요] 사용자 프로필 정보가 제공되면 반드시 활용하세요! 
+   - 나이가 있으면 "당신의 나이는 알 수 없지만" 같은 표현을 절대 사용하지 마세요.
+   - 대신 "사용자님의 나이(XX세)를 고려하여..." 같은 표현을 사용하세요.
+   - 프로필 정보가 있으면 반드시 언급하고, 그 정보를 바탕으로 맞춤형 답변을 제공하세요.
 
-**답변 형식**
+답변 형식:
 - 핵심 내용을 먼저 제시하고, 상세 정보를 이어서 설명합니다.
 - 조건이 있는 경우 명확하게 구분하여 설명합니다.
 - 필요시 단계별로 정리하여 안내합니다.
+- 강조는 "중요:", "핵심은", "특히" 같은 자연스러운 표현을 사용합니다.
 
-**제공된 컨텍스트**
+제공된 컨텍스트:
 {context}
 
-**사용자 프로필(있으면 반영)**
 {user_profile}
 
-**이전 대화 내역**
+이전 대화 내역:
 {chat_history}
 """,
     ),
@@ -301,19 +471,25 @@ class GraphService:
                     elif hasattr(msg, 'type') and hasattr(msg, 'content'):
                         chat_history += f"{msg.type}: {msg.content}\n"
             
+            # 사용자 프로필 포맷팅
+            user_profile_formatted = format_user_profile(state.get("user_profile", {}))
+            
             # 답변 생성 (비동기)
             response = await self.youth_policy_chain.ainvoke({
                 "question": question,
                 "context": context,
                 "chat_history": chat_history,
-                "user_profile": state.get("user_profile", {})
+                "user_profile": user_profile_formatted
             })
+            
+            # 마크다운 형식 제거
+            response = remove_markdown_formatting(response)
             
             # 정보 출처 안내 추가
             source = state.get("search_source", "unknown")
             source_text = {
-                "pdf": "\n\n📄 *[출처: 업로드된 정책 문서]*",
-                "web": "\n\n🌐 *[출처: 웹 검색 결과 - 최신 정보일 수 있으니 공식 사이트에서 확인을 권장합니다]*"
+                "pdf": "\n\n📄 [출처: 업로드된 정책 문서]",
+                "web": "\n\n🌐 [출처: 웹 검색 결과 - 최신 정보일 수 있으니 공식 사이트에서 확인을 권장합니다]"
             }.get(source, "")
             
             final_answer = f"{response}{source_text}"
@@ -467,15 +643,13 @@ class GraphService:
                             chat_history = ""
                             
                             # 프롬프트 생성
-                            user_profile_text = ""
-                            if user_profile:
-                                user_profile_text = f"\n사용자 프로필: {json.dumps(user_profile, ensure_ascii=False)}"
+                            user_profile_formatted = format_user_profile(user_profile)
                             
                             chain_input = {
                                 "question": question,
                                 "context": context if context else "관련 정보를 찾을 수 없습니다.",
                                 "chat_history": chat_history,
-                                "user_profile": user_profile_text
+                                "user_profile": user_profile_formatted
                             }
                             
                             messages = YOUTH_POLICY_PROMPT.format_messages(**chain_input)
@@ -493,6 +667,12 @@ class GraphService:
                                     if hasattr(chunk, 'content') and chunk.content:
                                         content = chunk.content
                                         full_answer += content
+                                        
+                                        # 스트리밍 중 마크다운 제거 (단순 치환)
+                                        # 청크가 쪼개져도 안전하게 작동하도록 단순 치환만 수행
+                                        content = content.replace('**', '')
+                                        content = content.replace('__', '')
+                                        content = content.replace('`', '')
                                         
                                         if not first_content_received:
                                             first_content_received = True
@@ -542,15 +722,13 @@ class GraphService:
                             chat_history = ""
                             
                             # 프롬프트 생성
-                            user_profile_text = ""
-                            if user_profile:
-                                user_profile_text = f"\n사용자 프로필: {json.dumps(user_profile, ensure_ascii=False)}"
+                            user_profile_formatted = format_user_profile(user_profile)
                             
                             chain_input = {
                                 "question": question,
                                 "context": context if context else "관련 정보를 찾을 수 없습니다.",
                                 "chat_history": chat_history,
-                                "user_profile": user_profile_text
+                                "user_profile": user_profile_formatted
                             }
                             
                             messages = YOUTH_POLICY_PROMPT.format_messages(**chain_input)
@@ -568,6 +746,12 @@ class GraphService:
                                     if hasattr(chunk, 'content') and chunk.content:
                                         content = chunk.content
                                         full_answer += content
+                                        
+                                        # 스트리밍 중 마크다운 제거 (단순 치환)
+                                        # 청크가 쪼개져도 안전하게 작동하도록 단순 치환만 수행
+                                        content = content.replace('**', '')
+                                        content = content.replace('__', '')
+                                        content = content.replace('`', '')
                                         
                                         if not first_content_received:
                                             first_content_received = True
@@ -629,6 +813,12 @@ class GraphService:
                             content = chunk.content
                             full_answer += content
                             
+                            # 스트리밍 중 마크다운 제거 (단순 치환)
+                            # 청크가 쪼개져도 안전하게 작동하도록 단순 치환만 수행
+                            content = content.replace('**', '')
+                            content = content.replace('__', '')
+                            content = content.replace('`', '')
+                            
                             if not first_content_received:
                                 first_content_received = True
                                 yield {
@@ -650,8 +840,8 @@ class GraphService:
             
             # 출처 정보 추가
             source_text = {
-                "pdf": "\n\n📄 *[출처: 업로드된 정책 문서]*",
-                "web": "\n\n🌐 *[출처: 웹 검색 결과 - 최신 정보일 수 있으니 공식 사이트에서 확인을 권장합니다]*"
+                "pdf": "\n\n📄 [출처: 업로드된 정책 문서]",
+                "web": "\n\n🌐 [출처: 웹 검색 결과 - 최신 정보일 수 있으니 공식 사이트에서 확인을 권장합니다]"
             }.get(search_source, "")
             
             if source_text:
