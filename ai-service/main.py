@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 import os
 import uuid
@@ -84,9 +84,13 @@ app.add_middleware(
 # Request/Response 모델
 class ChatRequest(BaseModel):
     message: str
-    user_id: Optional[str] = None
-    session_id: Optional[str] = None
-    user_profile: Optional[dict] = None
+    user_id: Optional[str] = Field(None, alias='userId')
+    session_id: Optional[str] = Field(None, alias='sessionId')
+    user_profile: Optional[dict] = Field(None, alias='userProfile')
+    
+    class Config:
+        # Java 백엔드에서 camelCase로 보내므로 alias를 허용
+        populate_by_name = True
 
 
 class ChatResponse(BaseModel):
@@ -170,6 +174,7 @@ async def chat_stream(request: ChatRequest):
         session_id = request.session_id or str(uuid.uuid4())
         
         logger.info(f"스트리밍 질문 받음 [세션: {session_id[:8]}]: {request.message[:50]}...")
+        logger.info(f"📋 사용자 프로필 정보: {request.user_profile}")
         
         async def generate():
             """SSE 스트림 생성"""
