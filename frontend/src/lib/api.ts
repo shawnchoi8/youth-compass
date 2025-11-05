@@ -5,21 +5,35 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8080/api";
 
-// 임시 User ID (TODO: JWT 인증으로 대체)
-const TEMP_USER_ID = "1";
+/**
+ * localStorage에서 현재 로그인한 사용자 ID 가져오기
+ */
+function getCurrentUserId(): string | null {
+  return localStorage.getItem("userId");
+}
 
 /**
  * API 요청 헬퍼 함수
+ * @param requireAuth - true면 User-Id 헤더 필수 (기본값: true)
  */
 async function apiRequest<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  requireAuth: boolean = true
 ): Promise<T> {
   const headers: HeadersInit = {
     "Content-Type": "application/json",
-    "User-Id": TEMP_USER_ID,
     ...options.headers,
   };
+
+  // 인증이 필요한 API인 경우에만 User-Id 헤더 추가
+  if (requireAuth) {
+    const userId = getCurrentUserId();
+    if (!userId) {
+      throw new Error("로그인이 필요합니다.");
+    }
+    headers["User-Id"] = userId;
+  }
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
@@ -29,6 +43,27 @@ async function apiRequest<T>(
   if (!response.ok) {
     const error = await response.text();
     throw new Error(`API Error: ${response.status} - ${error}`);
+  }
+
+  // 204 No Content인 경우 빈 객체 반환
+  if (response.status === 204) {
+    return {} as T;
+  }
+
+  // Content-Length가 0이거나 응답 본문이 비어있는 경우 빈 객체 반환
+  const contentLength = response.headers.get("content-length");
+  if (contentLength === "0") {
+    return {} as T;
+  }
+
+  // Content-Type이 JSON이 아닌 경우 또는 없는 경우 처리
+  const contentType = response.headers.get("content-type");
+  if (!contentType || !contentType.includes("application/json")) {
+    const text = await response.text();
+    if (!text || text.trim() === "") {
+      return {} as T;
+    }
+    throw new Error(`Expected JSON response but got: ${contentType}`);
   }
 
   return response.json();
@@ -115,11 +150,16 @@ export async function sendMessageStream(
   onError: (error: Error) => void
 ): Promise<void> {
   try {
+    const userId = getCurrentUserId();
+    if (!userId) {
+      throw new Error("로그인이 필요합니다.");
+    }
+
     const response = await fetch(`${API_BASE_URL}/chat/stream`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "User-Id": TEMP_USER_ID,
+        "User-Id": userId,
       },
       body: JSON.stringify(request),
     });
@@ -243,4 +283,81 @@ export async function searchFaqs(keyword: string): Promise<FaqResponse[]> {
  */
 export async function getAllFaqs(): Promise<FaqResponse[]> {
   return apiRequest<FaqResponse[]>("/faq");
+}
+
+// ===== User API =====
+
+export interface UserRegisterRequest {
+  userLoginId: string;
+  userPassword: string;
+  userName: string;
+  userResidence?: string;
+  userAge?: number;
+  userSalary?: number;
+  userAssets?: number;
+  userNote?: string;
+  userAgreePrivacy?: boolean;
+}
+
+export interface UserLoginRequest {
+  userLoginId: string;
+  userPassword: string;
+}
+
+export interface UserResponse {
+  userId: number;
+  userLoginId: string;
+  userName: string;
+  userResidence?: string;
+  userAge?: number;
+  userSalary?: number;
+  userAssets?: number;
+  userNote?: string;
+  userAgreePrivacy?: boolean;
+  userCreatedAt: string;
+  userUpdatedAt: string;
+}
+
+/**
+ * 회원가입
+ */
+export async function registerUser(
+  request: UserRegisterRequest
+): Promise<UserResponse> {
+  return apiRequest<UserResponse>("/users/register", {
+    method: "POST",
+    body: JSON.stringify(request),
+  }, false); // 인증 불필요
+}
+
+/**
+ * 로그인
+ */
+export async function loginUser(
+  request: UserLoginRequest
+): Promise<UserResponse> {
+  return apiRequest<UserResponse>("/users/login", {
+    method: "POST",
+    body: JSON.stringify(request),
+  }, false); // 인증 불필요
+}
+
+/**
+ * 사용자 정보 조회
+ */
+export async function getUserInfo(userId: number): Promise<UserResponse> {
+  return apiRequest<UserResponse>(`/users/${userId}`);
+}
+
+/**
+ * 사용자 정보 수정
+ */
+export async function updateUserInfo(
+  userId: number,
+  request: Partial<UserRegisterRequest>
+): Promise<UserResponse> {
+  return apiRequest<UserResponse>(`/users/${userId}`, {
+    method: "PUT",
+    body: JSON.stringify(request),
+  });
 }

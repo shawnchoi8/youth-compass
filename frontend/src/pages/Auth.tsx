@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,22 +7,28 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { Compass } from "lucide-react";
 import { z } from "zod";
+import {
+  registerUser,
+  loginUser,
+  type UserRegisterRequest,
+  type UserLoginRequest
+} from "@/lib/api";
 
 const signupSchema = z.object({
-  email: z.string().email("올바른 이메일 주소를 입력해주세요"),
-  password: z.string().min(6, "비밀번호는 최소 6자 이상이어야 합니다"),
+  userLoginId: z.string().min(3, "로그인 ID는 최소 3자 이상이어야 합니다"),
+  userPassword: z.string().min(8, "비밀번호는 최소 8자 이상이어야 합니다"),
   confirmPassword: z.string(),
-  name: z.string().min(1, "이름을 입력해주세요"),
-  age: z.string().min(1, "나이를 입력해주세요"),
-  income: z.string().optional(),
-}).refine((data) => data.password === data.confirmPassword, {
+  userName: z.string().min(1, "이름을 입력해주세요"),
+  userAge: z.string().optional(),
+  userSalary: z.string().optional(),
+}).refine((data) => data.userPassword === data.confirmPassword, {
   message: "비밀번호가 일치하지 않습니다",
   path: ["confirmPassword"],
 });
 
 const loginSchema = z.object({
-  email: z.string().email("올바른 이메일 주소를 입력해주세요"),
-  password: z.string().min(1, "비밀번호를 입력해주세요"),
+  userLoginId: z.string().min(1, "로그인 ID를 입력해주세요"),
+  userPassword: z.string().min(1, "비밀번호를 입력해주세요"),
 });
 
 const Auth = () => {
@@ -31,34 +36,32 @@ const Auth = () => {
   const { toast } = useToast();
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
-  
+
   const [loginForm, setLoginForm] = useState({
-    email: "",
-    password: "",
+    userLoginId: "",
+    userPassword: "",
   });
 
   const [signupForm, setSignupForm] = useState({
-    email: "",
-    password: "",
+    userLoginId: "",
+    userPassword: "",
     confirmPassword: "",
-    name: "",
-    age: "",
-    income: "",
+    userName: "",
+    userAge: "",
+    userSalary: "",
   });
 
   useEffect(() => {
-    const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        navigate("/");
-      }
-    };
-    checkUser();
+    // localStorage에 userId가 있으면 이미 로그인한 것으로 간주
+    const userId = localStorage.getItem("userId");
+    if (userId) {
+      navigate("/");
+    }
   }, [navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       loginSchema.parse(loginForm);
     } catch (error) {
@@ -73,36 +76,42 @@ const Auth = () => {
     }
 
     setLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: loginForm.email,
-      password: loginForm.password,
-    });
 
-    setLoading(false);
+    try {
+      const request: UserLoginRequest = {
+        userLoginId: loginForm.userLoginId,
+        userPassword: loginForm.userPassword,
+      };
 
-    if (error) {
-      toast({
-        title: "로그인 실패",
-        description: error.message === "Invalid login credentials" 
-          ? "이메일 또는 비밀번호가 올바르지 않습니다"
-          : error.message,
-        variant: "destructive",
-      });
-      return;
-    }
+      const response = await loginUser(request);
 
-    if (data.session) {
+      // 로그인 성공 시 localStorage에 저장
+      localStorage.setItem("userId", response.userId.toString());
+      localStorage.setItem("userName", response.userName);
+
+      // 헤더 업데이트를 위한 커스텀 이벤트 발생
+      window.dispatchEvent(new Event('loginStatusChanged'));
+
       toast({
         title: "로그인 성공",
         description: "청년나침반에 오신 것을 환영합니다!",
       });
+
       navigate("/");
+    } catch (error) {
+      toast({
+        title: "로그인 실패",
+        description: "로그인 ID 또는 비밀번호가 올바르지 않습니다",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       signupSchema.parse(signupForm);
     } catch (error) {
@@ -117,51 +126,43 @@ const Auth = () => {
     }
 
     setLoading(true);
-    
-    const { data, error } = await supabase.auth.signUp({
-      email: signupForm.email,
-      password: signupForm.password,
-    });
 
-    if (error) {
-      setLoading(false);
-      toast({
-        title: "회원가입 실패",
-        description: error.message === "User already registered"
-          ? "이미 가입된 이메일입니다"
-          : error.message,
-        variant: "destructive",
-      });
-      return;
-    }
+    try {
+      const request: UserRegisterRequest = {
+        userLoginId: signupForm.userLoginId,
+        userPassword: signupForm.userPassword,
+        userName: signupForm.userName,
+        userAge: signupForm.userAge ? parseInt(signupForm.userAge) : undefined,
+        userSalary: signupForm.userSalary ? parseFloat(signupForm.userSalary) : undefined,
+        userAgreePrivacy: true,
+      };
 
-    if (data.user) {
-      // Create profile
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .insert({
-          user_id: data.user.id,
-          name: signupForm.name,
-          age: parseInt(signupForm.age),
-          income: signupForm.income || null,
-        });
+      const response = await registerUser(request);
 
-      setLoading(false);
+      // 회원가입 성공 시 자동 로그인 (localStorage에 저장)
+      localStorage.setItem("userId", response.userId.toString());
+      localStorage.setItem("userName", response.userName);
 
-      if (profileError) {
-        toast({
-          title: "프로필 생성 실패",
-          description: "회원가입은 완료되었으나 프로필 정보 저장에 실패했습니다",
-          variant: "destructive",
-        });
-        return;
-      }
+      // 헤더 업데이트를 위한 커스텀 이벤트 발생
+      window.dispatchEvent(new Event('loginStatusChanged'));
 
       toast({
         title: "회원가입이 완료되었습니다",
         description: "이제 청년 정책을 탐색해보세요!",
       });
+
       navigate("/");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "";
+      toast({
+        title: "회원가입 실패",
+        description: errorMessage.includes("존재하는")
+          ? "이미 존재하는 로그인 ID입니다"
+          : "회원가입 중 오류가 발생했습니다",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -191,13 +192,14 @@ const Auth = () => {
             {isLogin ? (
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="login-email">이메일</Label>
+                  <Label htmlFor="login-id">로그인 ID</Label>
                   <Input
-                    id="login-email"
-                    type="email"
-                    placeholder="example@email.com"
-                    value={loginForm.email}
-                    onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                    id="login-id"
+                    name="userLoginId"
+                    type="text"
+                    placeholder="로그인 ID를 입력하세요"
+                    value={loginForm.userLoginId}
+                    onChange={(e) => setLoginForm({ ...loginForm, userLoginId: e.target.value })}
                     required
                   />
                 </div>
@@ -205,10 +207,11 @@ const Auth = () => {
                   <Label htmlFor="login-password">비밀번호</Label>
                   <Input
                     id="login-password"
+                    name="userPassword"
                     type="password"
-                    placeholder="••••••"
-                    value={loginForm.password}
-                    onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                    placeholder="••••••••"
+                    value={loginForm.userPassword}
+                    onChange={(e) => setLoginForm({ ...loginForm, userPassword: e.target.value })}
                     required
                   />
                 </div>
@@ -229,15 +232,16 @@ const Auth = () => {
             ) : (
               <form onSubmit={handleSignup} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="signup-email">
-                    아이디 (이메일) <span className="text-destructive">*</span>
+                  <Label htmlFor="signup-id">
+                    로그인 ID <span className="text-destructive">*</span>
                   </Label>
                   <Input
-                    id="signup-email"
-                    type="email"
-                    placeholder="example@email.com"
-                    value={signupForm.email}
-                    onChange={(e) => setSignupForm({ ...signupForm, email: e.target.value })}
+                    id="signup-id"
+                    name="userLoginId"
+                    type="text"
+                    placeholder="로그인 ID (최소 3자 이상)"
+                    value={signupForm.userLoginId}
+                    onChange={(e) => setSignupForm({ ...signupForm, userLoginId: e.target.value })}
                     required
                   />
                 </div>
@@ -247,10 +251,11 @@ const Auth = () => {
                   </Label>
                   <Input
                     id="signup-password"
+                    name="userPassword"
                     type="password"
-                    placeholder="최소 6자 이상"
-                    value={signupForm.password}
-                    onChange={(e) => setSignupForm({ ...signupForm, password: e.target.value })}
+                    placeholder="최소 8자 이상"
+                    value={signupForm.userPassword}
+                    onChange={(e) => setSignupForm({ ...signupForm, userPassword: e.target.value })}
                     required
                   />
                 </div>
@@ -260,6 +265,7 @@ const Auth = () => {
                   </Label>
                   <Input
                     id="signup-confirm"
+                    name="confirmPassword"
                     type="password"
                     placeholder="비밀번호 재입력"
                     value={signupForm.confirmPassword}
@@ -273,7 +279,7 @@ const Auth = () => {
                   <p className="text-xs text-muted-foreground mb-4">
                     회원가입 시 입력한 정보는 기본정보 입력 페이지에서 자동으로 채워집니다
                   </p>
-                  
+
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="signup-name">
@@ -281,32 +287,33 @@ const Auth = () => {
                       </Label>
                       <Input
                         id="signup-name"
+                        name="userName"
                         placeholder="홍길동"
-                        value={signupForm.name}
-                        onChange={(e) => setSignupForm({ ...signupForm, name: e.target.value })}
+                        value={signupForm.userName}
+                        onChange={(e) => setSignupForm({ ...signupForm, userName: e.target.value })}
                         required
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="signup-age">
-                        나이 <span className="text-destructive">*</span>
-                      </Label>
+                      <Label htmlFor="signup-age">나이 (선택)</Label>
                       <Input
                         id="signup-age"
+                        name="userAge"
                         type="number"
                         placeholder="27"
-                        value={signupForm.age}
-                        onChange={(e) => setSignupForm({ ...signupForm, age: e.target.value })}
-                        required
+                        value={signupForm.userAge}
+                        onChange={(e) => setSignupForm({ ...signupForm, userAge: e.target.value })}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="signup-income">월 소득 (선택)</Label>
+                      <Label htmlFor="signup-salary">월 소득 (선택)</Label>
                       <Input
-                        id="signup-income"
-                        placeholder="예: 300만원"
-                        value={signupForm.income}
-                        onChange={(e) => setSignupForm({ ...signupForm, income: e.target.value })}
+                        id="signup-salary"
+                        name="userSalary"
+                        type="number"
+                        placeholder="예: 3000000 (단위: 원)"
+                        value={signupForm.userSalary}
+                        onChange={(e) => setSignupForm({ ...signupForm, userSalary: e.target.value })}
                       />
                     </div>
                   </div>

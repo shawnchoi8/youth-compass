@@ -118,6 +118,10 @@ public class ConversationService {
             throw new IllegalArgumentException("대화방 접근 권한이 없습니다.");
         }
 
+        // 1. 먼저 연관된 모든 메시지 삭제
+        messageRepository.deleteByConversationConversationId(conversationId);
+
+        // 2. 그 다음 대화방 삭제
         conversationRepository.delete(conversation);
     }
 }
