@@ -62,7 +62,7 @@ export interface ConversationResponse {
 }
 
 export interface CreateConversationRequest {
-  title: string;
+  conversationTitle: string;
 }
 
 export interface ConversationHistoryResponse {

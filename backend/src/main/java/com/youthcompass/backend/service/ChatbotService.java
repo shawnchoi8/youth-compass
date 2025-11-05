@@ -1,5 +1,7 @@
 package com.youthcompass.backend.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.youthcompass.backend.domain.User;
 import com.youthcompass.backend.domain.Conversation;
 import com.youthcompass.backend.domain.Message;
@@ -17,6 +19,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.DefaultTransactionDefinition;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
@@ -39,6 +45,8 @@ public class ChatbotService {
     private final UserRepository userRepository;
     private final RestTemplate restTemplate; // 일반 채팅용
     private final WebClient webClient; // 스트리밍 채팅용
+    private final PlatformTransactionManager transactionManager; // 수동 트랜잭션 관리
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${ai.service.url:http://ai-service:8000}")
     private String aiServiceUrl;
@@ -188,6 +196,18 @@ public class ChatbotService {
 
         System.out.println("Conversation found and authorized");
 
+        // 첫 번째 메시지인 경우 대화 제목 업데이트
+        long messageCount = messageRepository.countByConversationConversationId(conversation.getConversationId());
+        if (messageCount == 0 && "새 대화".equals(conversation.getConversationTitle())) {
+            // 첫 30자까지만 제목으로 사용
+            String newTitle = request.getMessage().length() > 30
+                ? request.getMessage().substring(0, 30) + "..."
+                : request.getMessage();
+            conversation.updateTitle(newTitle);
+            conversationRepository.save(conversation);
+            System.out.println("Updated conversation title to: " + newTitle);
+        }
+
         // 사용자 메시지 저장
         Message userMessage = Message.builder()
                 .conversation(conversation)
@@ -214,6 +234,9 @@ public class ChatbotService {
 
         System.out.println("Calling AI service at: " + aiServiceUrl + "/chat-stream");
 
+        // AI 응답을 축적할 StringBuilder (content 청크들을 모음)
+        final StringBuilder responseAccumulator = new StringBuilder();
+
         // AI 서비스 스트리밍 호출
         return webClient.post()
             .uri(aiServiceUrl + "/chat-stream")
@@ -224,21 +247,61 @@ public class ChatbotService {
             .doOnSubscribe(subscription -> {
                 System.out.println("=== WebClient subscribed ===");
             })
-            .doOnNext(chunk -> {
-                System.out.println("Received chunk from AI: " + chunk.substring(0, Math.min(50, chunk.length())));
-            })
-            .doOnComplete(() -> {
-                System.out.println("=== Stream completed ===");
-            })
-            .doOnError(error -> {
-                System.err.println("=== Stream error: " + error.getMessage() + " ===");
-            })
             .map(dataLine -> {
                 // SSE 형식 파싱: "data: {...}" -> "{...}"
                 if (dataLine.startsWith("data: ")) {
                     return dataLine.substring(6); // "data: " 제거
                 }
                 return dataLine;
+            })
+            .doOnNext(chunk -> {
+                // content 타입의 청크만 축적
+                try {
+                    if (chunk.contains("\"type\"") && chunk.contains("\"content\"")) {
+                        JsonNode jsonNode = objectMapper.readTree(chunk);
+                        if ("content".equals(jsonNode.get("type").asText()) && jsonNode.has("content")) {
+                            String content = jsonNode.get("content").asText();
+                            responseAccumulator.append(content);
+                        }
+                    }
+                } catch (Exception e) {
+                    // JSON 파싱 실패는 무시 (content 아닌 청크들)
+                }
+            })
+            .doOnComplete(() -> {
+                System.out.println("=== Stream completed ===");
+                // 스트림 완료 후 축적된 응답을 DB에 저장
+                String accumulatedResponse = responseAccumulator.toString();
+                System.out.println("Accumulated response length: " + accumulatedResponse.length());
+
+                if (accumulatedResponse != null && !accumulatedResponse.isEmpty()) {
+                    // 새로운 트랜잭션 시작 (Reactive 스트림은 별도 스레드에서 실행됨)
+                    DefaultTransactionDefinition def = new DefaultTransactionDefinition();
+                    def.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+                    TransactionStatus status = transactionManager.getTransaction(def);
+
+                    try {
+                        Message aiMessage = Message.builder()
+                            .conversation(conversation)
+                            .messageContent(accumulatedResponse)
+                            .messageRole(Message.MessageRole.AI)
+                            .build();
+                        messageRepository.save(aiMessage);
+                        transactionManager.commit(status);
+                        System.out.println("✅ AI response saved to DB!");
+                        System.out.println("Length: " + accumulatedResponse.length() + " chars");
+                        System.out.println("Preview: " + accumulatedResponse.substring(0, Math.min(100, accumulatedResponse.length())) + "...");
+                    } catch (Exception e) {
+                        transactionManager.rollback(status);
+                        System.err.println("❌ Failed to save AI response to DB: " + e.getMessage());
+                        e.printStackTrace();
+                    }
+                } else {
+                    System.err.println("⚠️  No AI response to save (accumulated response is empty)");
+                }
+            })
+            .doOnError(error -> {
+                System.err.println("=== Stream error: " + error.getMessage() + " ===");
             })
             .onErrorResume(error -> {
                 return Flux.error(new RuntimeException("AI 서비스 호출 실패: " + error.getMessage()));
