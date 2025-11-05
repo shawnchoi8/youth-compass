@@ -78,17 +78,18 @@ def check_local_chromadb():
 def check_docker_chromadb():
     """Docker Compose ChromaDB 확인"""
     print("\n" + "=" * 60)
-    print("🐳 Docker ChromaDB 확인 (chromadb:8000)")
+    print("🐳 Docker ChromaDB 확인 (localhost:8001)")
     print("=" * 60)
     
     try:
         # Docker Compose의 ChromaDB 연결
         # 컨테이너 내부에서 실행 시: chromadb:8000
         # 호스트에서 실행 시: localhost:8001
+        # Windows 호스트에서 실행: localhost:8001 사용
+        # (Docker 포트 매핑 8001:8000)
         client = chromadb.HttpClient(
-            host="chromadb",  # Docker Compose 서비스 이름
-            port=8000,  # 컨테이너 내부 포트
-            settings=ChromaSettings(anonymized_telemetry=False)
+            host="localhost",  
+            port=8001
         )
         
         collections = client.list_collections()

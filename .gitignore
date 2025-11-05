@@ -27,7 +27,9 @@ ai-service/__pycache__/
 ai-service/*.pyc
 ai-service/venv/
 ai-service/.venv/
-ai-service/data/documents/
+# documents 폴더는 제외하되, policy_mapping.json과 문서 파일은 포함
+ai-service/data/documents/*
+!ai-service/data/documents/policy_mapping.json
 
 # etc
 echo "*.zip" >> .gitignore
