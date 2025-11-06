@@ -529,7 +529,7 @@ const Chat = () => {
             const data = JSON.parse(chunk);
             console.log("📦 Received chunk:", data);
 
-            // 웹 검색 출처 수신
+            // 웹 검색 출처 수신 (미리 저장만 하고 표시는 done 시점에)
             if (data.type === "sources" && data.sources) {
               console.log("🔗 Sources received:", data.sources);
               sources = data.sources;
@@ -539,7 +539,7 @@ const Chat = () => {
             if (data.type === "content" && data.content) {
               aiResponse += data.content;
 
-              // 첫 content가 왔을 때 AI 메시지 추가
+              // 첫 content가 왔을 때 AI 메시지 추가 (sources 제외)
               if (!messageAdded) {
                 messageAdded = true;
                 const aiMessage: Message = {
@@ -550,18 +550,42 @@ const Chat = () => {
                     hour: "2-digit",
                     minute: "2-digit",
                   }),
-                  sources: sources.length > 0 ? sources : undefined,
                 };
                 setMessages((prev) => [...prev, aiMessage]);
               } else {
-                // 실시간으로 메시지 업데이트
+                // 실시간으로 메시지 업데이트 (sources 제외)
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === aiMessageId
-                      ? { ...msg, content: aiResponse, sources: sources.length > 0 ? sources : undefined }
+                      ? { ...msg, content: aiResponse }
                       : msg
                   )
                 );
+              }
+            }
+
+            // done 이벤트: LLM 답변 완료 직후 sources 즉시 표시
+            if (data.type === "done") {
+              console.log("✅ Done event received");
+              console.log("Current sources:", sources);
+              if (data.sources) {
+                console.log("Done event has sources:", data.sources);
+                sources = data.sources;
+              }
+              // LLM 답변이 끝난 직후 sources를 즉시 추가
+              if (sources && sources.length > 0) {
+                console.log("🔗 Adding sources to message:", sources);
+                setMessages((prev) => {
+                  const updated = prev.map((msg) =>
+                    msg.id === aiMessageId
+                      ? { ...msg, sources: sources }
+                      : msg
+                  );
+                  console.log("📝 Updated messages:", updated);
+                  return updated;
+                });
+              } else {
+                console.log("⚠️ No sources to add");
               }
             }
           } catch (e) {
