@@ -94,6 +94,9 @@ const MyPage = () => {
       localStorage.setItem("userName", formData.name);
       window.dispatchEvent(new Event('loginStatusChanged'));
 
+      // 최신 데이터 다시 불러오기
+      await loadProfile(userId);
+
       toast({
         title: "저장 완료",
         description: "내 정보가 성공적으로 저장되었습니다.",
