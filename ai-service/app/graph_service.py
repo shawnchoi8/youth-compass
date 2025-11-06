@@ -131,8 +131,10 @@ def format_user_profile(user_profile: Optional[dict]) -> str:
         try:
             salary_value = float(salary) if isinstance(salary, (int, float, str)) else None
             if salary_value:
-                salary_formatted = f"{salary_value:,.0f}원"
-                profile_parts.append(f"- 연봉: {salary_formatted}")
+                # 만원 단위로 변환하여 표시
+                salary_manwon = int(salary_value / 10000)
+                salary_formatted = f"{salary_manwon:,}만원"
+                profile_parts.append(f"- 연봉: {salary_formatted} (연 {salary_value:,.0f}원)")
                 # 소득 구간 힌트
                 if salary_value < 30000000:
                     profile_parts.append("  (저소득층 대상 정책 적극 추천)")
@@ -148,8 +150,10 @@ def format_user_profile(user_profile: Optional[dict]) -> str:
         try:
             assets_value = float(assets) if isinstance(assets, (int, float, str)) else None
             if assets_value:
-                assets_formatted = f"{assets_value:,.0f}원"
-                profile_parts.append(f"- 자산: {assets_formatted}")
+                # 만원 단위로 변환하여 표시
+                assets_manwon = int(assets_value / 10000)
+                assets_formatted = f"{assets_manwon:,}만원"
+                profile_parts.append(f"- 자산: {assets_formatted} (총 {assets_value:,.0f}원)")
                 # 자산 구간 힌트
                 if assets_value < 50000000:
                     profile_parts.append("  (자산 요건이 낮은 정책 우선 추천)")

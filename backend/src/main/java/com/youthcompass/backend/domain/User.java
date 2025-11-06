@@ -73,9 +73,11 @@ public class User {
      * @param salary 급여
      * @param assets 자산
      * @param note 비고
+     * @param agreePrivacy AI 답변 시 프로필 정보 사용 여부
      */
     public void updateProfile(String name, String residence, Integer age,
-                            BigDecimal salary, BigDecimal assets, String note) {
+                            BigDecimal salary, BigDecimal assets, String note,
+                            Boolean agreePrivacy) {
         if (name != null) {
             this.userName = name;
         }
@@ -93,6 +95,9 @@ public class User {
         }
         if (note != null) {
             this.userNote = note;
+        }
+        if (agreePrivacy != null) {
+            this.userAgreePrivacy = agreePrivacy;
         }
     }
 }

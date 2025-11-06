@@ -21,6 +21,7 @@ const MyPage = () => {
     salary: "",
     assets: "",
     residence: "",
+    note: "",
     useAsDefault: true,
   });
 
@@ -50,10 +51,11 @@ const MyPage = () => {
       setFormData({
         name: data.userName || "",
         age: data.userAge?.toString() || "",
-        salary: data.userSalary?.toString() || "",
-        assets: data.userAssets?.toString() || "",
+        salary: data.userSalary ? (data.userSalary / 10000).toString() : "",
+        assets: data.userAssets ? (data.userAssets / 10000).toString() : "",
         residence: data.userResidence || "",
-        useAsDefault: true,
+        note: data.userNote || "",
+        useAsDefault: data.userAgreePrivacy ?? true,
       });
     } catch (error) {
       console.error("프로필 로드 오류:", error);
@@ -83,9 +85,15 @@ const MyPage = () => {
       const updateData = {
         userName: formData.name,
         userAge: formData.age ? parseInt(formData.age) : undefined,
-        userSalary: formData.salary ? parseFloat(formData.salary) : undefined,
-        userAssets: formData.assets ? parseFloat(formData.assets) : undefined,
+        userSalary: formData.salary && !isNaN(parseFloat(formData.salary))
+          ? parseFloat(formData.salary) * 10000
+          : undefined,
+        userAssets: formData.assets && !isNaN(parseFloat(formData.assets))
+          ? parseFloat(formData.assets) * 10000
+          : undefined,
         userResidence: formData.residence || undefined,
+        userNote: formData.note || undefined,
+        userAgreePrivacy: formData.useAsDefault,
       };
 
       await updateUserInfo(userId, updateData);
@@ -148,7 +156,7 @@ const MyPage = () => {
             <div>
               <h1 className="text-3xl font-bold text-foreground">내 정보</h1>
               <p className="text-muted-foreground mt-2">
-                정확한 정책 추천을 위해 정보를 입력해주세요
+                정확한 정책 추천을 위해 정보를 입력해주세요.
               </p>
             </div>
             <Button 
@@ -166,7 +174,7 @@ const MyPage = () => {
             <CardHeader>
               <CardTitle>기본 정보</CardTitle>
               <CardDescription>
-                청년 정책 추천에 필요한 정보입니다
+                청년 정책 추천에 필요한 정보입니다.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -180,7 +188,7 @@ const MyPage = () => {
                     name="name"
                     value={formData.name}
                     onChange={(e) => handleChange("name", e.target.value)}
-                    placeholder="이름을 입력하세요"
+                    placeholder="이름을 입력하세요."
                     required
                   />
                 </div>
@@ -193,25 +201,25 @@ const MyPage = () => {
                     type="number"
                     value={formData.age}
                     onChange={(e) => handleChange("age", e.target.value)}
-                    placeholder="나이를 입력하세요"
+                    placeholder="만 나이를 입력하세요."
                   />
                   <p className="text-xs text-muted-foreground">
-                    청년 정책 추천을 위해 필요합니다
+                    청년 정책 추천을 위해 필요합니다.
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="salary">월 소득</Label>
+                  <Label htmlFor="salary">연봉</Label>
                   <Input
                     id="salary"
                     name="salary"
                     type="number"
                     value={formData.salary}
                     onChange={(e) => handleChange("salary", e.target.value)}
-                    placeholder="예: 3000000 (단위: 원)"
+                    placeholder="예: 3000 (단위: 만 원)"
                   />
                   <p className="text-xs text-muted-foreground">
-                    소득 기준 정책 추천에 활용됩니다
+                    소득 기준 정책 추천에 활용됩니다.
                   </p>
                 </div>
 
@@ -223,10 +231,10 @@ const MyPage = () => {
                     type="number"
                     value={formData.assets}
                     onChange={(e) => handleChange("assets", e.target.value)}
-                    placeholder="예: 45000000 (단위: 원)"
+                    placeholder="예: 5000 (단위: 만 원)"
                   />
                   <p className="text-xs text-muted-foreground">
-                    자산 기준 정책 추천에 활용됩니다
+                    자산 기준 정책 추천에 활용됩니다.
                   </p>
                 </div>
 
@@ -240,7 +248,21 @@ const MyPage = () => {
                     placeholder="예: 서울시 마포구"
                   />
                   <p className="text-xs text-muted-foreground">
-                    지역별 정책 추천에 활용됩니다
+                    지역별 정책 추천에 활용됩니다.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="note">자유 메시지</Label>
+                  <Input
+                    id="note"
+                    name="note"
+                    value={formData.note}
+                    onChange={(e) => handleChange("note", e.target.value)}
+                    placeholder="예: 취업 준비생입니다, 1인 가구입니다 등"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    AI가 답변할 때 고려해야 할 사항을 입력하세요.
                   </p>
                 </div>
 
@@ -260,7 +282,7 @@ const MyPage = () => {
                   </Label>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  입력한 정보를 바탕으로 맞춤형 정책을 추천받습니다
+                  입력한 정보를 바탕으로 맞춤형 정책을 추천받습니다.
                 </p>
 
                 <Button type="submit" className="w-full" size="lg">
@@ -275,9 +297,9 @@ const MyPage = () => {
               <div className="space-y-2">
                 <h3 className="font-medium">💡 왜 이 정보가 필요한가요?</h3>
                 <ul className="space-y-1 text-sm text-muted-foreground">
-                  <li>• 청년 정책은 나이, 소득, 재산 등 다양한 조건이 있어요</li>
-                  <li>• 내 정보를 입력하면 지원 가능한 정책만 추천받을 수 있어요</li>
-                  <li>• 모든 정보는 안전하게 보관되며, 정책 추천 목적으로만 사용돼요</li>
+                  <li>• 청년 정책은 나이, 소득, 재산 등 다양한 조건이 있어요.</li>
+                  <li>• 내 정보를 입력하면 지원 가능한 정책만 추천받을 수 있어요.</li>
+                  <li>• 모든 정보는 안전하게 보관되며, 정책 추천 목적으로만 사용돼요.</li>
                 </ul>
               </div>
             </CardContent>

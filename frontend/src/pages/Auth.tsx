@@ -15,20 +15,20 @@ import {
 } from "@/lib/api";
 
 const signupSchema = z.object({
-  userLoginId: z.string().min(3, "로그인 ID는 최소 3자 이상이어야 합니다"),
-  userPassword: z.string().min(8, "비밀번호는 최소 8자 이상이어야 합니다"),
+  userLoginId: z.string().min(3, "로그인 ID는 최소 3자 이상이어야 합니다."),
+  userPassword: z.string().min(8, "비밀번호는 최소 8자 이상이어야 합니다."),
   confirmPassword: z.string(),
-  userName: z.string().min(1, "이름을 입력해주세요"),
+  userName: z.string().min(1, "이름을 입력해주세요."),
   userAge: z.string().optional(),
   userSalary: z.string().optional(),
 }).refine((data) => data.userPassword === data.confirmPassword, {
-  message: "비밀번호가 일치하지 않습니다",
+  message: "비밀번호가 일치하지 않습니다.",
   path: ["confirmPassword"],
 });
 
 const loginSchema = z.object({
-  userLoginId: z.string().min(1, "로그인 ID를 입력해주세요"),
-  userPassword: z.string().min(1, "비밀번호를 입력해주세요"),
+  userLoginId: z.string().min(1, "로그인 ID를 입력해주세요."),
+  userPassword: z.string().min(1, "비밀번호를 입력해주세요."),
 });
 
 const Auth = () => {
@@ -49,6 +49,9 @@ const Auth = () => {
     userName: "",
     userAge: "",
     userSalary: "",
+    userAssets: "",
+    userResidence: "",
+    userNote: "",
   });
 
   useEffect(() => {
@@ -133,7 +136,10 @@ const Auth = () => {
         userPassword: signupForm.userPassword,
         userName: signupForm.userName,
         userAge: signupForm.userAge ? parseInt(signupForm.userAge) : undefined,
-        userSalary: signupForm.userSalary ? parseFloat(signupForm.userSalary) : undefined,
+        userSalary: signupForm.userSalary ? parseFloat(signupForm.userSalary) * 10000 : undefined,
+        userAssets: signupForm.userAssets ? parseFloat(signupForm.userAssets) * 10000 : undefined,
+        userResidence: signupForm.userResidence || undefined,
+        userNote: signupForm.userNote || undefined,
         userAgreePrivacy: true,
       };
 
@@ -147,7 +153,7 @@ const Auth = () => {
       window.dispatchEvent(new Event('loginStatusChanged'));
 
       toast({
-        title: "회원가입이 완료되었습니다",
+        title: "회원가입이 완료되었습니다.",
         description: "이제 청년 정책을 탐색해보세요!",
       });
 
@@ -181,8 +187,8 @@ const Auth = () => {
             <CardTitle>{isLogin ? "로그인" : "회원가입"}</CardTitle>
             <CardDescription>
               {isLogin 
-                ? "청년 정책을 탐색하려면 로그인하세요" 
-                : "기본 정보를 입력하고 맞춤 정책을 받아보세요"}
+                ? "청년 정책을 탐색하려면 로그인하세요." 
+                : "기본 정보를 입력하고 맞춤 정책을 받아보세요."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -194,7 +200,7 @@ const Auth = () => {
                     id="login-id"
                     name="userLoginId"
                     type="text"
-                    placeholder="로그인 ID를 입력하세요"
+                    placeholder="로그인 ID를 입력하세요."
                     value={loginForm.userLoginId}
                     onChange={(e) => setLoginForm({ ...loginForm, userLoginId: e.target.value })}
                     required
@@ -297,21 +303,55 @@ const Auth = () => {
                         id="signup-age"
                         name="userAge"
                         type="number"
-                        placeholder="27"
+                        placeholder="만 나이를 입력하세요."
                         value={signupForm.userAge}
                         onChange={(e) => setSignupForm({ ...signupForm, userAge: e.target.value })}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="signup-salary">월 소득 (선택)</Label>
+                      <Label htmlFor="signup-salary">연봉 (선택)</Label>
                       <Input
                         id="signup-salary"
                         name="userSalary"
                         type="number"
-                        placeholder="예: 3000000 (단위: 원)"
+                        placeholder="예: 3000 (단위: 만 원)"
                         value={signupForm.userSalary}
                         onChange={(e) => setSignupForm({ ...signupForm, userSalary: e.target.value })}
                       />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-assets">총 자산 (선택)</Label>
+                      <Input
+                        id="signup-assets"
+                        name="userAssets"
+                        type="number"
+                        placeholder="예: 5000 (단위: 만 원)"
+                        value={signupForm.userAssets}
+                        onChange={(e) => setSignupForm({ ...signupForm, userAssets: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-residence">거주 지역 (선택)</Label>
+                      <Input
+                        id="signup-residence"
+                        name="userResidence"
+                        placeholder="예: 서울시 마포구"
+                        value={signupForm.userResidence}
+                        onChange={(e) => setSignupForm({ ...signupForm, userResidence: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-note">자유 메시지 (선택)</Label>
+                      <Input
+                        id="signup-note"
+                        name="userNote"
+                        placeholder="예: 취업 준비생입니다, 1인 가구입니다 등"
+                        value={signupForm.userNote}
+                        onChange={(e) => setSignupForm({ ...signupForm, userNote: e.target.value })}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        AI가 답변할 때 고려해야 할 사항을 입력하세요.
+                      </p>
                     </div>
                   </div>
                 </div>

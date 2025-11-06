@@ -36,4 +36,7 @@ public class UserUpdateRequest {
 
     /** 비고 */
     private String userNote;
+
+    /** AI 답변 시 프로필 정보 사용 여부 */
+    private Boolean userAgreePrivacy;
 }
