@@ -41,8 +41,17 @@ async function apiRequest<T>(
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`API Error: ${response.status} - ${error}`);
+    // Spring의 ResponseStatusException 응답 파싱 시도
+    try {
+      const errorData = await response.json();
+      // Spring Boot 에러 응답 구조: { timestamp, status, error, message, path }
+      const errorMessage = errorData.message || errorData.error || `HTTP ${response.status}`;
+      throw new Error(errorMessage);
+    } catch (parseError) {
+      // JSON 파싱 실패 시 텍스트로 fallback
+      const errorText = await response.text();
+      throw new Error(errorText || `HTTP ${response.status} 오류가 발생했습니다.`);
+    }
   }
 
   // 204 No Content인 경우 빈 객체 반환
@@ -168,7 +177,15 @@ export async function sendMessageStream(
     });
 
     if (!response.ok) {
-      throw new Error(`API Error: ${response.status}`);
+      // Spring의 ResponseStatusException 응답 파싱 시도
+      try {
+        const errorText = await response.text();
+        const errorData = JSON.parse(errorText);
+        const errorMessage = errorData.message || errorData.error || `HTTP ${response.status}`;
+        throw new Error(errorMessage);
+      } catch (parseError) {
+        throw new Error(`HTTP ${response.status} 오류가 발생했습니다.`);
+      }
     }
 
     const reader = response.body?.getReader();

@@ -364,7 +364,8 @@ public class ChatbotService {
                 System.err.println("=== Stream error: " + error.getMessage() + " ===");
             })
             .onErrorResume(error -> {
-                return Flux.error(new RuntimeException("AI 서비스 호출 실패: " + error.getMessage()));
+                log.error("AI 스트리밍 서비스 호출 실패: {}", error.getMessage(), error);
+                return Flux.error(new RuntimeException("AI 응답을 처리하는 중 오류가 발생했습니다."));
             });
     }
 }

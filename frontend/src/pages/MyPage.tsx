@@ -59,7 +59,7 @@ const MyPage = () => {
       console.error("프로필 로드 오류:", error);
       toast({
         title: "오류",
-        description: "프로필 정보를 불러오는데 실패했습니다",
+        description: error instanceof Error ? error.message : "프로필 정보를 불러오는데 실패했습니다.",
         variant: "destructive",
       });
     } finally {
@@ -104,7 +104,7 @@ const MyPage = () => {
     } catch (error) {
       toast({
         title: "저장 실패",
-        description: "정보 저장 중 오류가 발생했습니다",
+        description: error instanceof Error ? error.message : "정보 저장 중 오류가 발생했습니다.",
         variant: "destructive",
       });
     }
