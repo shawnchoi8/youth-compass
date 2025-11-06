@@ -2,6 +2,7 @@ package com.youthcompass.backend.controller;
 
 import com.youthcompass.backend.dto.user.UserLoginRequest;
 import com.youthcompass.backend.dto.user.UserRegisterRequest;
+import com.youthcompass.backend.dto.user.UserUpdateRequest;
 import com.youthcompass.backend.dto.user.UserResponse;
 import com.youthcompass.backend.service.UserService;
 import jakarta.validation.Valid;
@@ -71,7 +72,7 @@ public class UserController {
     @PutMapping("/{userId}")
     public ResponseEntity<UserResponse> updateUserInfo(
             @PathVariable Long userId,
-            @Valid @RequestBody UserRegisterRequest request
+            @Valid @RequestBody UserUpdateRequest request
     ) {
         UserResponse response = userService.updateUserInfo(userId, request);
         return ResponseEntity.ok(response);

@@ -2,6 +2,7 @@ package com.youthcompass.backend.service;
 
 import com.youthcompass.backend.domain.User;
 import com.youthcompass.backend.dto.user.UserRegisterRequest;
+import com.youthcompass.backend.dto.user.UserUpdateRequest;
 import com.youthcompass.backend.dto.user.UserLoginRequest;
 import com.youthcompass.backend.dto.user.UserResponse;
 import com.youthcompass.backend.repository.UserRepository;
@@ -101,7 +102,7 @@ public class UserService {
      * @throws IllegalArgumentException 사용자를 찾을 수 없는 경우
      */
     @Transactional
-    public UserResponse updateUserInfo(Long userId, UserRegisterRequest request) {
+    public UserResponse updateUserInfo(Long userId, UserUpdateRequest request) {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
 
