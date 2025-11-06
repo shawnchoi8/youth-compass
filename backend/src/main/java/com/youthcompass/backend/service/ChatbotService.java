@@ -14,8 +14,8 @@ import com.youthcompass.backend.dto.user.UserProfileDTO;
 import com.youthcompass.backend.repository.ConversationRepository;
 import com.youthcompass.backend.repository.MessageRepository;
 import com.youthcompass.backend.repository.UserRepository;
-import lombok.Builder;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +23,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.DefaultTransactionDefinition;
+import org.springframework.dao.DataAccessException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
@@ -37,6 +38,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(readOnly = true)
 public class ChatbotService {
 
@@ -78,7 +80,12 @@ public class ChatbotService {
                 .messageContent(request.getMessage())
                 .messageRole(Message.MessageRole.USER)
                 .build();
-        messageRepository.save(message);
+        try {
+            messageRepository.save(message);
+        } catch (DataAccessException e) {
+            log.error("사용자 메시지 저장 실패 userId={}, conversationId={}: {}", userId, conversation.getConversationId(), e.getMessage(), e);
+            throw new RuntimeException("메시지를 저장하는 중 오류가 발생했습니다.", e);
+        }
 
         // AI 응답 생성
         String aiResponseContent = generateAiResponse(userId, conversation.getConversationId(), request.getMessage());
@@ -89,7 +96,12 @@ public class ChatbotService {
                 .messageContent(aiResponseContent)
                 .messageRole(Message.MessageRole.AI)
                 .build();
-        messageRepository.save(aiMessage);
+        try {
+            messageRepository.save(aiMessage);
+        } catch (DataAccessException e) {
+            log.error("AI 메시지 저장 실패 userId={}, conversationId={}: {}", userId, conversation.getConversationId(), e.getMessage(), e);
+            throw new RuntimeException("AI 응답을 저장하는 중 오류가 발생했습니다.", e);
+        }
 
         return new SendMessageResponse(
             conversation.getConversationId(),
@@ -204,7 +216,12 @@ public class ChatbotService {
                 ? request.getMessage().substring(0, 30) + "..."
                 : request.getMessage();
             conversation.updateTitle(newTitle);
-            conversationRepository.save(conversation);
+            try {
+                conversationRepository.save(conversation);
+            } catch (DataAccessException e) {
+                log.error("대화 제목 업데이트 실패 userId={}, conversationId={}: {}", userId, conversation.getConversationId(), e.getMessage(), e);
+                throw new RuntimeException("대화 제목을 저장하는 중 오류가 발생했습니다.", e);
+            }
             System.out.println("Updated conversation title to: " + newTitle);
         }
 
@@ -214,7 +231,12 @@ public class ChatbotService {
                 .messageContent(request.getMessage())
                 .messageRole(Message.MessageRole.USER)
                 .build();
-        messageRepository.save(userMessage);
+        try {
+            messageRepository.save(userMessage);
+        } catch (DataAccessException e) {
+            log.error("스트리밍 사용자 메시지 저장 실패 userId={}, conversationId={}: {}", userId, conversation.getConversationId(), e.getMessage(), e);
+            throw new RuntimeException("메시지를 저장하는 중 오류가 발생했습니다.", e);
+        }
 
         System.out.println("User message saved");
 
@@ -297,7 +319,12 @@ public class ChatbotService {
                             .messageRole(Message.MessageRole.AI)
                             .messageSources(accumulatedSources.isEmpty() ? null : accumulatedSources)
                             .build();
-                        messageRepository.save(aiMessage);
+                        try {
+                            messageRepository.save(aiMessage);
+                        } catch (DataAccessException e) {
+                            log.error("스트리밍 AI 메시지 저장 실패 conversationId={}: {}", conversation.getConversationId(), e.getMessage(), e);
+                            throw new RuntimeException("AI 응답을 저장하는 중 오류가 발생했습니다.", e);
+                        }
                         transactionManager.commit(status);
                         System.out.println("✅ AI response saved to DB!");
                         System.out.println("Length: " + accumulatedResponse.length() + " chars");
@@ -306,7 +333,7 @@ public class ChatbotService {
                     } catch (Exception e) {
                         transactionManager.rollback(status);
                         System.err.println("❌ Failed to save AI response to DB: " + e.getMessage());
-                        e.printStackTrace();
+                        log.error("스트리밍 AI 메시지 저장 트랜잭션 롤백 conversationId={}: {}", conversation.getConversationId(), e.getMessage(), e);
                     }
                 } else {
                     System.err.println("⚠️  No AI response to save (accumulated response is empty)");

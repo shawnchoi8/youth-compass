@@ -6,8 +6,10 @@ import com.youthcompass.backend.dto.user.UserLoginRequest;
 import com.youthcompass.backend.dto.user.UserResponse;
 import com.youthcompass.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataAccessException;
 
 /**
  * 사용자 관리 서비스
@@ -15,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(readOnly = true)
 public class UserService {
 
@@ -49,9 +52,13 @@ public class UserService {
                 .userAgreePrivacy(request.getUserAgreePrivacy())
                 .build();
 
-        User savedUser = userRepository.save(user);
-
-        return UserResponse.from(savedUser);
+        try {
+            User savedUser = userRepository.save(user);
+            return UserResponse.from(savedUser);
+        } catch (DataAccessException e) {
+            log.error("회원가입 저장 실패 loginId={}: {}", request.getUserLoginId(), e.getMessage(), e);
+            throw new RuntimeException("회원 정보를 저장하는 중 오류가 발생했습니다.", e);
+        }
     }
 
     /**

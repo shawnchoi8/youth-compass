@@ -6,10 +6,12 @@ import com.youthcompass.backend.dto.chatbot.SendMessageResponse;
 import com.youthcompass.backend.service.ChatbotService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
@@ -39,8 +41,15 @@ public class ChatbotController {
             @RequestHeader("User-Id") Long userId, // TODO: JWT 인증으로 대체 예정
             @Valid @RequestBody SendMessageRequest request
     ) {
-        SendMessageResponse response = chatbotService.sendMessage(userId, request);
-        return ResponseEntity.ok(response);
+        // 서비스에서 던진 예외를 HTTP 상태 코드로 변환하여 클라이언트가 원인을 식별할 수 있도록 처리
+        try {
+            SendMessageResponse response = chatbotService.sendMessage(userId, request);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "AI 메시지 처리 중 오류가 발생했습니다.", e);
+        }
     }
 
     /**
@@ -57,10 +66,23 @@ public class ChatbotController {
             @RequestHeader("User-Id") Long userId, // TODO: JWT 인증으로 대체 예정
             @Valid @RequestBody SendMessageRequest request
     ) {
-        return chatbotService.sendMessageStream(userId, request)
-            .map(data -> ServerSentEvent.<String>builder()
-                .data(data)
-                .build());
+        // 스트리밍 응답에서도 동일한 예외 매핑을 적용해 일관된 에러 응답을 제공
+        try {
+            return chatbotService.sendMessageStream(userId, request)
+                .map(data -> ServerSentEvent.<String>builder()
+                    .data(data)
+                    .build())
+                .onErrorMap(IllegalArgumentException.class,
+                    e -> new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e))
+                .onErrorMap(RuntimeException.class, e ->
+                    e instanceof ResponseStatusException
+                        ? e
+                        : new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "AI 스트리밍 호출 중 오류가 발생했습니다.", e));
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "AI 스트리밍 호출 중 오류가 발생했습니다.", e);
+        }
     }
 
     /**
@@ -76,7 +98,14 @@ public class ChatbotController {
             @RequestHeader("User-Id") Long userId, // TODO: JWT 인증으로 대체 예정
             @PathVariable Long conversationId
     ) {
-        List<ChatMessageResponse> history = chatbotService.getConversationHistory(userId, conversationId);
-        return ResponseEntity.ok(history);
+        // 대화 기록 조회 실패 원인을 HTTP 상태 코드로 변환
+        try {
+            List<ChatMessageResponse> history = chatbotService.getConversationHistory(userId, conversationId);
+            return ResponseEntity.ok(history);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "대화 기록 조회 중 오류가 발생했습니다.", e);
+        }
     }
 }
