@@ -57,13 +57,13 @@ public class ChatbotController {
      * 사용자 메시지를 AI 서비스로 전송하고 SSE 스트림으로 응답을 받습니다.
      * (프론트엔드 -> Java 백엔드 -> Python AI 서비스)
      *
-     * @param userId 사용자 ID (헤더, TODO: JWT 인증으로 대체 예정)
+     * @param userId 사용자 ID (헤더, optional - 비회원은 null)
      * @param request 메시지 전송 요청 (대화방 ID, 메시지 내용)
      * @return SSE 스트림 (HTTP 200)
      */
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> sendMessageStream(
-            @RequestHeader("User-Id") Long userId, // TODO: JWT 인증으로 대체 예정
+            @RequestHeader(value = "User-Id", required = false) Long userId, // 비회원은 null 허용
             @Valid @RequestBody SendMessageRequest request
     ) {
         // 스트리밍 응답에서도 동일한 예외 매핑을 적용해 일관된 에러 응답을 제공
