@@ -142,6 +142,11 @@ const Chat = () => {
       setConversations(uniqueConvs);
     } catch (error) {
       console.error("Failed to load conversations:", error);
+      toast({
+        title: "오류",
+        description: error instanceof Error ? error.message : "대화 목록을 불러오는데 실패했습니다.",
+        variant: "destructive",
+      });
       setConversations([]);
     }
   };
@@ -202,7 +207,7 @@ const Chat = () => {
       console.error("Failed to create conversation:", error);
       toast({
         title: "오류",
-        description: "대화방 생성에 실패했습니다.",
+        description: error instanceof Error ? error.message : "대화방 생성에 실패했습니다.",
         variant: "destructive",
       });
     }
@@ -252,7 +257,7 @@ const Chat = () => {
       console.error("Failed to load conversation:", error);
       toast({
         title: "오류",
-        description: "대화를 불러오는데 실패했습니다.",
+        description: error instanceof Error ? error.message : "대화를 불러오는데 실패했습니다.",
         variant: "destructive",
       });
     }
@@ -297,7 +302,7 @@ const Chat = () => {
       console.error("Failed to delete conversation:", error);
       toast({
         title: "오류",
-        description: "대화 삭제에 실패했습니다.",
+        description: error instanceof Error ? error.message : "대화 삭제에 실패했습니다.",
         variant: "destructive",
       });
     }
@@ -484,7 +489,7 @@ const Chat = () => {
           console.error("Failed to create conversation:", error);
           toast({
             title: "오류",
-            description: "대화방 생성에 실패했습니다.",
+            description: error instanceof Error ? error.message : "대화방 생성에 실패했습니다.",
             variant: "destructive",
           });
           return;
@@ -599,7 +604,7 @@ const Chat = () => {
           setIsLoading(false);
           toast({
             title: "오류",
-            description: "메시지 전송에 실패했습니다.",
+            description: error.message || "메시지 전송에 실패했습니다.",
             variant: "destructive",
           });
         }
@@ -609,7 +614,7 @@ const Chat = () => {
       setIsLoading(false);
       toast({
         title: "오류",
-        description: "메시지 전송에 실패했습니다.",
+        description: error instanceof Error ? error.message : "메시지 전송에 실패했습니다.",
         variant: "destructive",
       });
     }

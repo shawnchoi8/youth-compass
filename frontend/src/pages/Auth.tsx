@@ -101,7 +101,7 @@ const Auth = () => {
     } catch (error) {
       toast({
         title: "로그인 실패",
-        description: "로그인 ID 또는 비밀번호가 올바르지 않습니다",
+        description: error instanceof Error ? error.message : "로그인 ID 또는 비밀번호가 올바르지 않습니다.",
         variant: "destructive",
       });
     } finally {
@@ -153,12 +153,9 @@ const Auth = () => {
 
       navigate("/");
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "";
       toast({
         title: "회원가입 실패",
-        description: errorMessage.includes("존재하는")
-          ? "이미 존재하는 로그인 ID입니다"
-          : "회원가입 중 오류가 발생했습니다",
+        description: error instanceof Error ? error.message : "회원가입 중 오류가 발생했습니다.",
         variant: "destructive",
       });
     } finally {
