@@ -198,15 +198,22 @@ public class ChatbotService {
         System.out.println("conversationId: " + request.getConversationId());
         System.out.println("message: " + request.getMessage());
 
-        // 대화방 조회 및 권한 확인
-        Conversation conversation = conversationRepository.findById(request.getConversationId())
-            .orElseThrow(() -> new IllegalArgumentException("대화방을 찾을 수 없습니다."));
+        // 비회원 여부 확인 (userId가 null이거나 conversationId가 null/음수)
+        boolean isGuest = (userId == null || request.getConversationId() == null || request.getConversationId() < 0);
+        
+        Conversation conversation = null;
+        UserProfileDTO userProfile = null;
 
-        if (!conversation.getUser().getUserId().equals(userId)) {
-            throw new IllegalArgumentException("대화방 접근 권한이 없습니다.");
-        }
+        if (!isGuest) {
+            // 회원인 경우: 대화방 조회 및 권한 확인
+            conversation = conversationRepository.findById(request.getConversationId())
+                .orElseThrow(() -> new IllegalArgumentException("대화방을 찾을 수 없습니다."));
 
-        System.out.println("Conversation found and authorized");
+            if (!conversation.getUser().getUserId().equals(userId)) {
+                throw new IllegalArgumentException("대화방 접근 권한이 없습니다.");
+            }
+
+            System.out.println("Conversation found and authorized");
 
         // 첫 번째 메시지인 경우 대화 제목 업데이트
         long messageCount = messageRepository.countByConversationConversationId(conversation.getConversationId());
@@ -238,19 +245,22 @@ public class ChatbotService {
             throw new RuntimeException("일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", e);
         }
 
-        System.out.println("User message saved");
+            System.out.println("User message saved");
 
-        // 사용자 프로필 정보 생성
-        User user = userRepository.findById(userId)
-            .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+            // 사용자 프로필 정보 생성
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
 
-        UserProfileDTO userProfile = UserProfileDTO.from(user);
+            userProfile = UserProfileDTO.from(user);
+        } else {
+            System.out.println("Guest user - skipping DB operations");
+        }
 
         // AI 서비스 요청 생성
         AiChatRequest aiRequest = new AiChatRequest(
             request.getMessage(),
-            String.valueOf(userId),
-            String.valueOf(conversation.getConversationId()),
+            userId != null ? String.valueOf(userId) : "guest",
+            conversation != null ? String.valueOf(conversation.getConversationId()) : "0",
             userProfile
         );
 
@@ -260,6 +270,10 @@ public class ChatbotService {
         final StringBuilder responseAccumulator = new StringBuilder();
         // 웹 검색 출처를 저장할 변수
         final StringBuilder sourcesAccumulator = new StringBuilder();
+        
+        // 람다 내부에서 사용하기 위해 final 변수로 복사
+        final Conversation finalConversation = conversation;
+        final boolean finalIsGuest = isGuest;
 
         // AI 서비스 스트리밍 호출
         return webClient.post()
@@ -300,13 +314,20 @@ public class ChatbotService {
             })
             .doOnComplete(() -> {
                 System.out.println("=== Stream completed ===");
-                // 스트림 완료 후 축적된 응답을 DB에 저장
+                
+                // 비회원 여부 확인 (final 변수 사용)
+                if (finalIsGuest) {
+                    System.out.println("Guest user - skipping DB save");
+                    return;
+                }
+                
+                // 회원인 경우에만 DB에 저장
                 String accumulatedResponse = responseAccumulator.toString();
                 String accumulatedSources = sourcesAccumulator.toString();
                 System.out.println("Accumulated response length: " + accumulatedResponse.length());
                 System.out.println("Accumulated sources: " + (accumulatedSources.isEmpty() ? "none" : accumulatedSources));
 
-                if (accumulatedResponse != null && !accumulatedResponse.isEmpty()) {
+                if (accumulatedResponse != null && !accumulatedResponse.isEmpty() && finalConversation != null) {
                     // 새로운 트랜잭션 시작 (Reactive 스트림은 별도 스레드에서 실행됨)
                     DefaultTransactionDefinition def = new DefaultTransactionDefinition();
                     def.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -314,7 +335,7 @@ public class ChatbotService {
 
                     try {
                         Message aiMessage = Message.builder()
-                            .conversation(conversation)
+                            .conversation(finalConversation)
                             .messageContent(accumulatedResponse)
                             .messageRole(Message.MessageRole.AI)
                             .messageSources(accumulatedSources.isEmpty() ? null : accumulatedSources)
@@ -333,7 +354,7 @@ public class ChatbotService {
                     } catch (Exception e) {
                         transactionManager.rollback(status);
                         System.err.println("❌ Failed to save AI response to DB: " + e.getMessage());
-                        log.error("스트리밍 AI 메시지 저장 트랜잭션 롤백 conversationId={}: {}", conversation.getConversationId(), e.getMessage(), e);
+                        log.error("스트리밍 AI 메시지 저장 트랜잭션 롤백 conversationId={}: {}", finalConversation != null ? finalConversation.getConversationId() : "null", e.getMessage(), e);
                     }
                 } else {
                     System.err.println("⚠️  No AI response to save (accumulated response is empty)");

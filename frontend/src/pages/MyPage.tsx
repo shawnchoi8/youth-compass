@@ -122,7 +122,7 @@ const MyPage = () => {
       description: "로그아웃되었습니다",
     });
 
-    navigate("/auth");
+    navigate("/");
   };
 
   const handleChange = (field: string, value: string | boolean) => {

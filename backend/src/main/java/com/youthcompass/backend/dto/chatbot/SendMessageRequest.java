@@ -15,8 +15,7 @@ import lombok.Setter;
 @NoArgsConstructor
 public class SendMessageRequest {
 
-    /** 대화방 ID */
-    @NotNull(message = "대화방 ID는 필수입니다.")
+    /** 대화방 ID (비회원은 null 또는 음수 허용) */
     private Long conversationId;
 
     /** 사용자가 전송한 메시지 내용 */
