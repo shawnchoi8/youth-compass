@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     upstage_api_key: Optional[str] = None
     tavily_api_key: Optional[str] = None
     
+    # LangSmith (모니터링 및 디버깅)
+    langchain_tracing_v2: Optional[bool] = False
+    langchain_api_key: Optional[str] = None
+    langchain_project: Optional[str] = "youth-compass"
+    
     # Database
     database_url: Optional[str] = None
     

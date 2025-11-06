@@ -23,6 +23,16 @@ logger = logging.getLogger(__name__)
 
 # 서비스 임포트(로깅 설정 후!)
 from app.config import settings
+
+# LangSmith 트레이싱 설정 (환경 변수 로드 후, 서비스 임포트 전에 설정)
+if settings.langchain_tracing_v2 and settings.langchain_api_key:
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGCHAIN_API_KEY"] = settings.langchain_api_key
+    os.environ["LANGCHAIN_PROJECT"] = settings.langchain_project or "youth-compass"
+    logger.info("✅ LangSmith 트레이싱 활성화됨")
+    logger.info(f"   - Project: {settings.langchain_project}")
+else:
+    logger.info("ℹ️  LangSmith 트레이싱 비활성화됨 (LANGCHAIN_TRACING_V2=false 또는 LANGCHAIN_API_KEY 미설정)")
 from app.graph_service import graph_service
 from app.rag_service import rag_service
 
@@ -123,7 +133,9 @@ async def health_check():
         "tavily_api_key_set": bool(settings.tavily_api_key),
         "documents_loaded": rag_service.has_documents,
         "llm_initialized": graph_service.llm is not None,
-        "graph_initialized": graph_service.app is not None
+        "graph_initialized": graph_service.app is not None,
+        "langsmith_enabled": bool(settings.langchain_tracing_v2 and settings.langchain_api_key),
+        "langsmith_project": settings.langchain_project if settings.langchain_tracing_v2 else None
     }
 
 
