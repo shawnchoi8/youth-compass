@@ -359,7 +359,9 @@ const Chat = () => {
                 >
                   <MessageSquare className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
                   <span className="flex-1 text-sm truncate">
-                    {conv.conversationTitle}
+                    {conv.conversationTitle.length > 13
+                      ? conv.conversationTitle.substring(0, 13) + "..."
+                      : conv.conversationTitle}
                   </span>
                   <Button
                     variant="ghost"
