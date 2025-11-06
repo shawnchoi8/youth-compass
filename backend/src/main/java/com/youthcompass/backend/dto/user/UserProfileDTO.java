@@ -31,7 +31,7 @@ public class UserProfileDTO {
     /** 연봉 */
     private BigDecimal salary;
 
-    /** 재산 */
+    /** 총 자산 */
     private BigDecimal assets;
 
     /** 참고 메시지 */
@@ -42,18 +42,22 @@ public class UserProfileDTO {
 
     /**
      * User 엔티티로부터 UserProfileDTO 생성
+     * userAgreePrivacy가 false인 경우 개인정보를 null로 설정합니다.
      *
      * @param user 사용자 엔티티
      * @return 사용자 프로필 DTO
      */
     public static UserProfileDTO from(User user) {
+        // AI 답변 시 프로필 정보 사용 여부 확인
+        boolean useProfile = user.getUserAgreePrivacy() != null && user.getUserAgreePrivacy();
+
         return UserProfileDTO.builder()
                 .name(user.getUserName())
-                .residence(user.getUserResidence())
-                .age(user.getUserAge())
-                .salary(user.getUserSalary())
-                .assets(user.getUserAssets())
-                .note(user.getUserNote())
+                .residence(useProfile ? user.getUserResidence() : null)
+                .age(useProfile ? user.getUserAge() : null)
+                .salary(useProfile ? user.getUserSalary() : null)
+                .assets(useProfile ? user.getUserAssets() : null)
+                .note(useProfile ? user.getUserNote() : null)
                 .agreePrivacy(user.getUserAgreePrivacy())
                 .build();
     }

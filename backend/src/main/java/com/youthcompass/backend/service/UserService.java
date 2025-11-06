@@ -120,7 +120,8 @@ public class UserService {
             request.getUserAge(),
             request.getUserSalary(),
             request.getUserAssets(),
-            request.getUserNote()
+            request.getUserNote(),
+            request.getUserAgreePrivacy()
         );
 
         return UserResponse.from(user);
