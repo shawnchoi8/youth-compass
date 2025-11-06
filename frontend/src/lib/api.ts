@@ -151,16 +151,19 @@ export async function sendMessageStream(
 ): Promise<void> {
   try {
     const userId = getCurrentUserId();
-    if (!userId) {
-      throw new Error("로그인이 필요합니다.");
+    
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+    };
+    
+    // 로그인한 경우에만 User-Id 헤더 추가
+    if (userId) {
+      headers["User-Id"] = userId;
     }
 
     const response = await fetch(`${API_BASE_URL}/chat/stream`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Id": userId,
-      },
+      headers,
       body: JSON.stringify(request),
     });
 

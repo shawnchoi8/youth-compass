@@ -19,6 +19,67 @@ import {
   ConversationResponse,
 } from "@/lib/api";
 
+// 로그인 상태 확인 함수
+const getCurrentUserId = (): string | null => {
+  return localStorage.getItem("userId");
+};
+
+// 비회원 대화 목록 관리 (sessionStorage)
+const GUEST_CONVERSATIONS_KEY = "guest_conversations";
+const GUEST_MESSAGES_PREFIX = "guest_messages_";
+
+const loadGuestConversations = (): ConversationResponse[] => {
+  try {
+    const data = sessionStorage.getItem(GUEST_CONVERSATIONS_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveGuestConversations = (conversations: ConversationResponse[]) => {
+  try {
+    sessionStorage.setItem(GUEST_CONVERSATIONS_KEY, JSON.stringify(conversations));
+  } catch (error) {
+    console.error("Failed to save guest conversations:", error);
+  }
+};
+
+const loadGuestMessages = (conversationId: number): Message[] => {
+  try {
+    const data = sessionStorage.getItem(`${GUEST_MESSAGES_PREFIX}${conversationId}`);
+    return data ? JSON.parse(data) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveGuestMessages = (conversationId: number, messages: Message[]) => {
+  try {
+    sessionStorage.setItem(`${GUEST_MESSAGES_PREFIX}${conversationId}`, JSON.stringify(messages));
+  } catch (error) {
+    console.error("Failed to save guest messages:", error);
+  }
+};
+
+const deleteGuestConversation = (conversationId: number) => {
+  try {
+    sessionStorage.removeItem(`${GUEST_MESSAGES_PREFIX}${conversationId}`);
+    const conversations = loadGuestConversations();
+    const updated = conversations.filter(c => c.conversationId !== conversationId);
+    saveGuestConversations(updated);
+  } catch (error) {
+    console.error("Failed to delete guest conversation:", error);
+  }
+};
+
+const generateGuestConversationId = (): number => {
+  const conversations = loadGuestConversations();
+  if (conversations.length === 0) return -1;
+  const minId = Math.min(...conversations.map(c => c.conversationId));
+  return minId - 1;
+};
+
 interface Source {
   title: string;
   url: string;
@@ -56,6 +117,15 @@ const Chat = () => {
 
   // 대화 목록 불러오기
   const loadConversations = async () => {
+    // 로그인 상태 확인
+    const userId = getCurrentUserId();
+    if (!userId) {
+      // 비회원인 경우 sessionStorage에서 불러오기
+      const guestConvs = loadGuestConversations();
+      setConversations(guestConvs);
+      return;
+    }
+
     try {
       const convs = await getUserConversations();
 
@@ -72,11 +142,45 @@ const Chat = () => {
       setConversations(uniqueConvs);
     } catch (error) {
       console.error("Failed to load conversations:", error);
+      setConversations([]);
     }
   };
 
   // 새 대화 시작
   const startNewConversation = async () => {
+    // 로그인 상태 확인
+    const userId = getCurrentUserId();
+    if (!userId) {
+      // 비회원인 경우 sessionStorage에 새 대화 생성
+      const guestConvId = generateGuestConversationId();
+      const now = new Date().toISOString();
+      const newConversation: ConversationResponse = {
+        conversationId: guestConvId,
+        conversationTitle: "새 대화",
+        conversationCreatedAt: now,
+        conversationUpdatedAt: now,
+      };
+      
+      const guestConvs = loadGuestConversations();
+      guestConvs.unshift(newConversation); // 최신 대화를 맨 앞에 추가
+      saveGuestConversations(guestConvs);
+      
+      setConversationId(guestConvId);
+      setMessages([
+        {
+          id: "welcome",
+          role: "assistant",
+          content: "안녕하세요! 청년 정책에 대해 무엇이든 물어보세요. 😊",
+          timestamp: new Date().toLocaleTimeString("ko-KR", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        },
+      ]);
+      await loadConversations(); // 목록 새로고침
+      return;
+    }
+
     try {
       const conversation = await createConversation({
         conversationTitle: "새 대화",
@@ -108,6 +212,15 @@ const Chat = () => {
   const selectConversation = async (convId: number) => {
     try {
       setConversationId(convId);
+      
+      // 비회원인 경우 (음수 conversationId)
+      if (convId < 0) {
+        const guestMessages = loadGuestMessages(convId);
+        setMessages(guestMessages);
+        return;
+      }
+      
+      // 회원인 경우
       const history = await getConversationHistory(convId);
 
       // 메시지 변환
@@ -148,6 +261,25 @@ const Chat = () => {
   // 대화 삭제
   const handleDeleteConversation = async (convId: number) => {
     try {
+      // 비회원인 경우 (음수 conversationId)
+      if (convId < 0) {
+        deleteGuestConversation(convId);
+        await loadConversations();
+
+        // 현재 선택된 대화가 삭제된 경우
+        if (conversationId === convId) {
+          setConversationId(null);
+          setMessages([]);
+        }
+
+        toast({
+          title: "성공",
+          description: "대화가 삭제되었습니다.",
+        });
+        return;
+      }
+      
+      // 회원인 경우
       await deleteConversation(convId);
       await loadConversations();
 
@@ -171,9 +303,69 @@ const Chat = () => {
     }
   };
 
+  // 로그인 상태 변화 감지 (로그인/로그아웃 감지)
+  useEffect(() => {
+    const handleLoginStatusChange = () => {
+      const userId = getCurrentUserId();
+      
+      if (!userId) {
+        // 로그아웃된 경우 (userId가 없음) - 비회원 상태로 전환
+        // 상태 초기화 (회원 대화는 없애고 비회원 대화만 표시)
+        const guestConvs = loadGuestConversations();
+        setConversations(guestConvs);
+        
+        // 현재 선택된 대화가 회원 대화인 경우 초기화
+        if (conversationId && conversationId > 0) {
+          setConversationId(null);
+          setMessages([]);
+        }
+        
+        setInitialQuery(null);
+        setIsLoading(false);
+        
+        // 비회원 채팅 허용 - 리다이렉트하지 않음
+      } else {
+        // 로그인된 경우 (userId가 있음) - 대화 목록 다시 불러오기
+        loadConversations();
+      }
+    };
+
+    // loginStatusChanged 이벤트 리스너 추가
+    window.addEventListener('loginStatusChanged', handleLoginStatusChange);
+    
+    // storage 이벤트 리스너 추가 (다른 탭에서 로그인/로그아웃 시)
+    window.addEventListener('storage', handleLoginStatusChange);
+
+    return () => {
+      window.removeEventListener('loginStatusChanged', handleLoginStatusChange);
+      window.removeEventListener('storage', handleLoginStatusChange);
+    };
+  }, [navigate, conversationId]);
+
   useEffect(() => {
     // 초기화: 대화 목록 불러오기
     const init = async () => {
+      // 로그인 상태 확인
+      const userId = getCurrentUserId();
+      
+      if (!userId) {
+        // 비회원인 경우 sessionStorage에서 대화 목록 불러오기
+        const guestConvs = loadGuestConversations();
+        setConversations(guestConvs);
+
+        // URL 쿼리로 전달된 질문이 있으면 새 대화 시작
+        const query = searchParams.get("q");
+        if (query) {
+          setInitialQuery(query);
+          setSearchParams({});
+          await startNewConversation();
+        } else if (guestConvs.length > 0) {
+          // 쿼리가 없으면 가장 최근 대화 자동 선택
+          await selectConversation(guestConvs[0].conversationId);
+        }
+        return;
+      }
+
       try {
         // 대화 목록 불러오기
         const convs = await getUserConversations();
@@ -203,6 +395,10 @@ const Chat = () => {
         }
       } catch (error) {
         console.error("Failed to initialize:", error);
+        // 에러 발생 시 상태 초기화
+        setConversations([]);
+        setMessages([]);
+        setConversationId(null);
       }
     };
 
@@ -219,8 +415,81 @@ const Chat = () => {
 
   const handleSend = async (text?: string) => {
     const messageText = text || input;
-    if (!messageText.trim() || !conversationId) {
+    if (!messageText.trim()) {
       return;
+    }
+
+    // 로그인 상태 확인
+    const userId = getCurrentUserId();
+    const isGuest = !userId;
+
+    // conversationId가 없으면 새 대화 생성
+    let currentConversationId = conversationId;
+    if (!currentConversationId) {
+      if (isGuest) {
+        // 비회원인 경우 sessionStorage에 새 대화 생성
+        const guestConvId = generateGuestConversationId();
+        const now = new Date().toISOString();
+        const newConversation: ConversationResponse = {
+          conversationId: guestConvId,
+          conversationTitle: "새 대화",
+          conversationCreatedAt: now,
+          conversationUpdatedAt: now,
+        };
+        
+        const guestConvs = loadGuestConversations();
+        guestConvs.unshift(newConversation);
+        saveGuestConversations(guestConvs);
+        
+        currentConversationId = guestConvId;
+        setConversationId(currentConversationId);
+        
+        // 환영 메시지 추가
+        setMessages([
+          {
+            id: "welcome",
+            role: "assistant",
+            content: "안녕하세요! 청년 정책에 대해 무엇이든 물어보세요. 😊",
+            timestamp: new Date().toLocaleTimeString("ko-KR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          },
+        ]);
+        
+        await loadConversations();
+      } else {
+        try {
+          const newConversation = await createConversation({
+            conversationTitle: "새 대화",
+          });
+          currentConversationId = newConversation.conversationId;
+          setConversationId(currentConversationId);
+          
+          // 환영 메시지 추가
+          setMessages([
+            {
+              id: "welcome",
+              role: "assistant",
+              content: "안녕하세요! 청년 정책에 대해 무엇이든 물어보세요. 😊",
+              timestamp: new Date().toLocaleTimeString("ko-KR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+            },
+          ]);
+          
+          await loadConversations();
+        } catch (error) {
+          console.error("Failed to create conversation:", error);
+          toast({
+            title: "오류",
+            description: "대화방 생성에 실패했습니다.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
     }
 
     const userMessage: Message = {
@@ -246,7 +515,7 @@ const Chat = () => {
     try {
       await sendMessageStream(
         {
-          conversationId,
+          conversationId: currentConversationId,
           message: messageText,
         },
         // onChunk: 스트리밍 데이터 수신
@@ -297,6 +566,30 @@ const Chat = () => {
         // onComplete
         () => {
           setIsLoading(false);
+          
+          // 비회원인 경우 sessionStorage에 메시지 저장
+          if (isGuest && currentConversationId) {
+            // 상태 업데이트 후 메시지 저장 (setTimeout으로 지연)
+            setTimeout(() => {
+              setMessages((currentMessages) => {
+                saveGuestMessages(currentConversationId, currentMessages);
+                
+                // 첫 메시지인 경우 대화 제목 업데이트
+                const guestConvs = loadGuestConversations();
+                const conv = guestConvs.find(c => c.conversationId === currentConversationId);
+                if (conv && conv.conversationTitle === "새 대화") {
+                  const newTitle = messageText.length > 30
+                    ? messageText.substring(0, 30) + "..."
+                    : messageText;
+                  conv.conversationTitle = newTitle;
+                  saveGuestConversations(guestConvs);
+                }
+                
+                return currentMessages;
+              });
+            }, 100);
+          }
+          
           // 메시지 전송 완료 후 대화 목록 갱신 (제목 업데이트 반영)
           loadConversations();
         },
