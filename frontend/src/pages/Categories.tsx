@@ -3,12 +3,7 @@ import Header from "@/components/Header";
 import PolicyCard from "@/components/PolicyCard";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Briefcase, Home, GraduationCap, Coins, Heart, Palette, ChevronDown } from "lucide-react";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Briefcase, Home, GraduationCap, Coins, Heart, Palette, LucideIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   getActiveCategories,
@@ -18,7 +13,7 @@ import {
 } from "@/lib/api";
 
 // 아이콘 매핑
-const categoryIconMap: Record<string, any> = {
+const categoryIconMap: Record<string, LucideIcon> = {
   "일자리": Briefcase,
   "주거": Home,
   "교육": GraduationCap,
@@ -38,13 +33,13 @@ const categoryColorMap: Record<string, string> = {
 
 interface CategoryWithFaqs extends CategoryResponse {
   faqs: FaqResponse[];
-  icon: any;
+  icon: LucideIcon;
   color: string;
 }
 
 const Categories = () => {
   const [categories, setCategories] = useState<CategoryWithFaqs[]>([]);
-  const [openCategories, setOpenCategories] = useState<number[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -68,9 +63,9 @@ const Categories = () => {
         );
 
         setCategories(categoriesWithFaqs);
-        // 첫 번째 카테고리는 기본으로 열기
+        // 첫 번째 카테고리를 기본으로 선택
         if (categoriesWithFaqs.length > 0) {
-          setOpenCategories([categoriesWithFaqs[0].categoryId]);
+          setSelectedCategoryId(categoriesWithFaqs[0].categoryId);
         }
       } catch (error) {
         console.error("Failed to load categories:", error);
@@ -87,13 +82,7 @@ const Categories = () => {
     loadCategories();
   }, []);
 
-  const toggleCategory = (categoryId: number) => {
-    setOpenCategories((prev) =>
-      prev.includes(categoryId)
-        ? prev.filter((id) => id !== categoryId)
-        : [...prev, categoryId]
-    );
-  };
+  const selectedCategory = categories.find(cat => cat.categoryId === selectedCategoryId);
 
   if (loading) {
     return (
@@ -117,56 +106,46 @@ const Categories = () => {
           <div>
             <h1 className="text-3xl font-bold text-foreground">자주 묻는 질문</h1>
             <p className="text-muted-foreground mt-2">
-              카테고리별로 청년 정책을 찾아보세요
+              카테고리를 선택하여 청년 정책을 찾아보세요
             </p>
           </div>
 
-          <div className="space-y-3">
+          {/* 카테고리 버튼들 */}
+          <div className="flex flex-wrap gap-3">
             {categories.map((category) => (
-              <Collapsible
+              <Button
                 key={category.categoryId}
-                open={openCategories.includes(category.categoryId)}
-                onOpenChange={() => toggleCategory(category.categoryId)}
+                variant={selectedCategoryId === category.categoryId ? "default" : "outline"}
+                onClick={() => setSelectedCategoryId(category.categoryId)}
+                className="flex items-center gap-2"
               >
-                <Card>
-                  <CollapsibleTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-between p-6 h-auto hover:bg-accent"
-                    >
-                      <div className="flex items-center gap-3">
-                        <category.icon className={`w-5 h-5 ${category.color}`} />
-                        <span className="font-semibold text-lg">{category.categoryName}</span>
-                        <span className="text-sm text-muted-foreground">({category.faqs.length})</span>
-                      </div>
-                      <ChevronDown
-                        className={`w-5 h-5 transition-transform ${
-                          openCategories.includes(category.categoryId) ? "rotate-180" : ""
-                        }`}
-                      />
-                    </Button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="px-6 pb-6 space-y-3 pt-2">
-                      {category.faqs.length > 0 ? (
-                        category.faqs.map((faq) => (
-                          <PolicyCard
-                            key={faq.faqId}
-                            id={faq.faqId.toString()}
-                            title={faq.faqQuestion}
-                            category={faq.categoryName}
-                            summary={faq.faqAnswer.substring(0, 100) + "..."}
-                          />
-                        ))
-                      ) : (
-                        <p className="text-sm text-muted-foreground">등록된 FAQ가 없습니다.</p>
-                      )}
-                    </div>
-                  </CollapsibleContent>
-                </Card>
-              </Collapsible>
+                <category.icon className="w-4 h-4" />
+                <span>{category.categoryName}</span>
+                <span className="text-xs opacity-70">({category.faqs.length})</span>
+              </Button>
             ))}
           </div>
+
+          {/* 선택된 카테고리의 FAQ 목록 */}
+          {selectedCategory && (
+            <div className="space-y-3">
+              {selectedCategory.faqs.length > 0 ? (
+                selectedCategory.faqs.map((faq) => (
+                  <PolicyCard
+                    key={faq.faqId}
+                    id={faq.faqId.toString()}
+                    title={faq.faqQuestion}
+                    category={faq.categoryName}
+                    summary={faq.faqAnswer.substring(0, 100) + "..."}
+                  />
+                ))
+              ) : (
+                <Card className="p-8 text-center">
+                  <p className="text-muted-foreground">등록된 FAQ가 없습니다.</p>
+                </Card>
+              )}
+            </div>
+          )}
         </div>
       </main>
     </div>
