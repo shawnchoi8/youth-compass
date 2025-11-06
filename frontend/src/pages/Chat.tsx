@@ -571,14 +571,14 @@ const Chat = () => {
         // onComplete
         () => {
           setIsLoading(false);
-          
+
           // 비회원인 경우 sessionStorage에 메시지 저장
           if (isGuest && currentConversationId) {
             // 상태 업데이트 후 메시지 저장 (setTimeout으로 지연)
             setTimeout(() => {
               setMessages((currentMessages) => {
                 saveGuestMessages(currentConversationId, currentMessages);
-                
+
                 // 첫 메시지인 경우 대화 제목 업데이트
                 const guestConvs = loadGuestConversations();
                 const conv = guestConvs.find(c => c.conversationId === currentConversationId);
@@ -589,14 +589,17 @@ const Chat = () => {
                   conv.conversationTitle = newTitle;
                   saveGuestConversations(guestConvs);
                 }
-                
+
+                // 제목 업데이트 후 대화 목록 갱신
+                loadConversations();
+
                 return currentMessages;
               });
             }, 100);
+          } else {
+            // 회원인 경우 대화 목록 갱신
+            loadConversations();
           }
-          
-          // 메시지 전송 완료 후 대화 목록 갱신 (제목 업데이트 반영)
-          loadConversations();
         },
         // onError
         (error: Error) => {

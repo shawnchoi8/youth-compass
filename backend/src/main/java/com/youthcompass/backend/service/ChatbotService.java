@@ -215,23 +215,6 @@ public class ChatbotService {
 
             System.out.println("Conversation found and authorized");
 
-            // 첫 번째 메시지인 경우 대화 제목 업데이트
-            long messageCount = messageRepository.countByConversationConversationId(conversation.getConversationId());
-            if (messageCount == 0 && "새 대화".equals(conversation.getConversationTitle())) {
-                // 첫 30자까지만 제목으로 사용
-                String newTitle = request.getMessage().length() > 30
-                    ? request.getMessage().substring(0, 30) + "..."
-                    : request.getMessage();
-                conversation.updateTitle(newTitle);
-                try {
-                    conversationRepository.save(conversation);
-                } catch (DataAccessException e) {
-                    log.error("대화 제목 업데이트 실패 userId={}, conversationId={}: {}", userId, conversation.getConversationId(), e.getMessage(), e);
-                    throw new RuntimeException("대화 제목을 저장하는 중 오류가 발생했습니다.", e);
-                }
-                System.out.println("Updated conversation title to: " + newTitle);
-            }
-
             // 사용자 메시지 저장
             Message userMessage = Message.builder()
                     .conversation(conversation)
@@ -351,6 +334,22 @@ public class ChatbotService {
                         System.out.println("Length: " + accumulatedResponse.length() + " chars");
                         System.out.println("Sources: " + (accumulatedSources.isEmpty() ? "none" : "saved"));
                         System.out.println("Preview: " + accumulatedResponse.substring(0, Math.min(100, accumulatedResponse.length())) + "...");
+
+                        // 트랜잭션 커밋 후 제목 업데이트 (첫 번째 질문인 경우)
+                        long messageCount = messageRepository.countByConversationConversationId(finalConversation.getConversationId());
+                        if (messageCount <= 2 && "새 대화".equals(finalConversation.getConversationTitle())) {
+                            // 첫 30자까지만 제목으로 사용
+                            String newTitle = request.getMessage().length() > 30
+                                ? request.getMessage().substring(0, 30) + "..."
+                                : request.getMessage();
+                            finalConversation.updateTitle(newTitle);
+                            try {
+                                conversationRepository.save(finalConversation);
+                                System.out.println("Updated conversation title to: " + newTitle);
+                            } catch (DataAccessException e) {
+                                log.error("대화 제목 업데이트 실패 conversationId={}: {}", finalConversation.getConversationId(), e.getMessage(), e);
+                            }
+                        }
                     } catch (Exception e) {
                         transactionManager.rollback(status);
                         System.err.println("❌ Failed to save AI response to DB: " + e.getMessage());
