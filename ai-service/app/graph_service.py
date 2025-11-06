@@ -608,15 +608,26 @@ class GraphService:
         
         try:
             logger.info(f"스트리밍 질문 처리 시작 (LangGraph 사용): {question[:50]}...")
-            
-            # 입력 준비
-            inputs = GraphState(
-                question=question,
-                user_profile=(user_profile or {})
-            )
-            
+
             # 설정
             config = {"configurable": {"thread_id": thread_id}}
+
+            # 이전 대화 내역을 메모리에서 불러오기
+            previous_messages = []
+            try:
+                checkpoint = self.memory.get(config)
+                if checkpoint and "values" in checkpoint:
+                    previous_messages = checkpoint["values"].get("messages", [])
+                    logger.info(f"이전 대화 내역 로드: {len(previous_messages)}개 메시지")
+            except Exception as e:
+                logger.warning(f"이전 대화 내역 로드 실패: {e}")
+
+            # 입력 준비 - 이전 메시지 포함
+            inputs = GraphState(
+                question=question,
+                user_profile=(user_profile or {}),
+                messages=previous_messages
+            )
             
             # LangGraph 워크플로우 실행
             # 하지만 llm_answer 노드 완료를 기다리지 않고, 관련성 체크 완료 후 즉시 스트리밍 시작
@@ -655,9 +666,18 @@ class GraphService:
                             # 답변 생성 시작
                             yield {"type": "status", "content": "답변 생성 중..."}
                             
-                            # 대화 히스토리 포맷팅
+                            # 대화 히스토리 포맷팅 - previous_messages 사용
                             chat_history = ""
-                            
+                            if previous_messages:
+                                for msg in previous_messages[-6:]:  # 최근 3턴
+                                    if isinstance(msg, tuple) and len(msg) == 2:
+                                        role, content = msg
+                                        role_label = "사용자" if role == "user" else "AI"
+                                        chat_history += f"{role_label}: {content}\n"
+                                    elif hasattr(msg, 'type') and hasattr(msg, 'content'):
+                                        role_label = "사용자" if msg.type in ["human", "user"] else "AI"
+                                        chat_history += f"{role_label}: {msg.content}\n"
+
                             # 프롬프트 생성
                             user_profile_formatted = format_user_profile(user_profile)
                             
@@ -734,9 +754,18 @@ class GraphService:
                             # 답변 생성 시작
                             yield {"type": "status", "content": "답변 생성 중..."}
                             
-                            # 대화 히스토리 포맷팅
+                            # 대화 히스토리 포맷팅 - previous_messages 사용
                             chat_history = ""
-                            
+                            if previous_messages:
+                                for msg in previous_messages[-6:]:  # 최근 3턴
+                                    if isinstance(msg, tuple) and len(msg) == 2:
+                                        role, content = msg
+                                        role_label = "사용자" if role == "user" else "AI"
+                                        chat_history += f"{role_label}: {content}\n"
+                                    elif hasattr(msg, 'type') and hasattr(msg, 'content'):
+                                        role_label = "사용자" if msg.type in ["human", "user"] else "AI"
+                                        chat_history += f"{role_label}: {msg.content}\n"
+
                             # 프롬프트 생성
                             user_profile_formatted = format_user_profile(user_profile)
                             
@@ -797,20 +826,27 @@ class GraphService:
             if not streaming_started:
                 # 일반적인 경우: llm_answer 노드 완료 후 스트리밍 시작
                 yield {"type": "status", "content": "답변 생성 중..."}
-                
-                # 대화 히스토리 포맷팅
+
+                # 대화 히스토리 포맷팅 - previous_messages 사용
                 chat_history = ""
-                
+                if previous_messages:
+                    for msg in previous_messages[-6:]:  # 최근 3턴
+                        if isinstance(msg, tuple) and len(msg) == 2:
+                            role, content = msg
+                            role_label = "사용자" if role == "user" else "AI"
+                            chat_history += f"{role_label}: {content}\n"
+                        elif hasattr(msg, 'type') and hasattr(msg, 'content'):
+                            role_label = "사용자" if msg.type in ["human", "user"] else "AI"
+                            chat_history += f"{role_label}: {msg.content}\n"
+
                 # 프롬프트 생성
-                user_profile_text = ""
-                if user_profile:
-                    user_profile_text = f"\n사용자 프로필: {json.dumps(user_profile, ensure_ascii=False)}"
-                
+                user_profile_formatted = format_user_profile(user_profile)
+
                 chain_input = {
                     "question": question,
                     "context": context if context else "관련 정보를 찾을 수 없습니다.",
                     "chat_history": chat_history,
-                    "user_profile": user_profile_text
+                    "user_profile": user_profile_formatted
                 }
                 
                 messages = YOUTH_POLICY_PROMPT.format_messages(**chain_input)
@@ -868,22 +904,25 @@ class GraphService:
             
             full_answer += source_text
             
-            # 메모리에 답변 저장 (대화 히스토리 업데이트)
+            # 메모리에 답변 저장 (대화 히스토리 업데이트) - 이전 메시지에 추가
             try:
                 from langchain_core.messages import HumanMessage, AIMessage
+                # 이전 메시지에 새 메시지 추가
+                updated_messages = previous_messages + [
+                    HumanMessage(content=question),
+                    AIMessage(content=full_answer)
+                ]
                 self.memory.put(
                     config,
                     {
                         "values": {
-                            "messages": [
-                                HumanMessage(content=question),
-                                AIMessage(content=full_answer)
-                            ]
+                            "messages": updated_messages
                         }
                     }
                 )
-            except:
-                pass  # 메모리 저장 실패는 무시
+                logger.info(f"대화 히스토리 저장 완료: 총 {len(updated_messages)}개 메시지")
+            except Exception as e:
+                logger.error(f"메모리 저장 실패: {e}")
             
             # 완료 신호
             done_event = {
