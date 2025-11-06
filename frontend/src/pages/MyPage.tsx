@@ -57,9 +57,10 @@ const MyPage = () => {
       });
     } catch (error) {
       console.error("프로필 로드 오류:", error);
+      const errorMessage = error instanceof Error ? error.message : "프로필 정보를 불러오는데 실패했습니다";
       toast({
         title: "오류",
-        description: "프로필 정보를 불러오는데 실패했습니다",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -102,9 +103,10 @@ const MyPage = () => {
         description: "내 정보가 성공적으로 저장되었습니다.",
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "정보 저장 중 오류가 발생했습니다";
       toast({
         title: "저장 실패",
-        description: "정보 저장 중 오류가 발생했습니다",
+        description: errorMessage,
         variant: "destructive",
       });
     }

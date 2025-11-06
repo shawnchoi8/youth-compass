@@ -84,7 +84,7 @@ public class ChatbotService {
             messageRepository.save(message);
         } catch (DataAccessException e) {
             log.error("사용자 메시지 저장 실패 userId={}, conversationId={}: {}", userId, conversation.getConversationId(), e.getMessage(), e);
-            throw new RuntimeException("메시지를 저장하는 중 오류가 발생했습니다.", e);
+            throw new RuntimeException("일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", e);
         }
 
         // AI 응답 생성
@@ -100,7 +100,7 @@ public class ChatbotService {
             messageRepository.save(aiMessage);
         } catch (DataAccessException e) {
             log.error("AI 메시지 저장 실패 userId={}, conversationId={}: {}", userId, conversation.getConversationId(), e.getMessage(), e);
-            throw new RuntimeException("AI 응답을 저장하는 중 오류가 발생했습니다.", e);
+            throw new RuntimeException("일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", e);
         }
 
         return new SendMessageResponse(
@@ -148,10 +148,10 @@ public class ChatbotService {
             if (aiResponse != null && aiResponse.getResponse() != null) {
                 return aiResponse.getResponse();
             } else {
-                throw new RuntimeException("AI 서비스 응답이 비어있습니다.");
+                throw new RuntimeException("답변 생성 중 오류가 발생했습니다. 다시 질문해 주세요.");
             }
         } catch (Exception e) {
-            throw new RuntimeException("AI 서비스 호출 실패: " + e.getMessage(), e);
+            throw new RuntimeException("답변 생성 중 오류가 발생했습니다. 다시 질문해 주세요.", e);
         }
     }
 
@@ -220,7 +220,7 @@ public class ChatbotService {
                 conversationRepository.save(conversation);
             } catch (DataAccessException e) {
                 log.error("대화 제목 업데이트 실패 userId={}, conversationId={}: {}", userId, conversation.getConversationId(), e.getMessage(), e);
-                throw new RuntimeException("대화 제목을 저장하는 중 오류가 발생했습니다.", e);
+                throw new RuntimeException("일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", e);
             }
             System.out.println("Updated conversation title to: " + newTitle);
         }
@@ -235,7 +235,7 @@ public class ChatbotService {
             messageRepository.save(userMessage);
         } catch (DataAccessException e) {
             log.error("스트리밍 사용자 메시지 저장 실패 userId={}, conversationId={}: {}", userId, conversation.getConversationId(), e.getMessage(), e);
-            throw new RuntimeException("메시지를 저장하는 중 오류가 발생했습니다.", e);
+            throw new RuntimeException("일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", e);
         }
 
         System.out.println("User message saved");
@@ -323,7 +323,7 @@ public class ChatbotService {
                             messageRepository.save(aiMessage);
                         } catch (DataAccessException e) {
                             log.error("스트리밍 AI 메시지 저장 실패 conversationId={}: {}", conversation.getConversationId(), e.getMessage(), e);
-                            throw new RuntimeException("AI 응답을 저장하는 중 오류가 발생했습니다.", e);
+                            throw new RuntimeException("일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", e);
                         }
                         transactionManager.commit(status);
                         System.out.println("✅ AI response saved to DB!");
@@ -343,7 +343,7 @@ public class ChatbotService {
                 System.err.println("=== Stream error: " + error.getMessage() + " ===");
             })
             .onErrorResume(error -> {
-                return Flux.error(new RuntimeException("AI 서비스 호출 실패: " + error.getMessage()));
+                return Flux.error(new RuntimeException("답변 생성 중 오류가 발생했습니다. 다시 질문해 주세요."));
             });
     }
 }

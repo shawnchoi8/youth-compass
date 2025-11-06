@@ -58,7 +58,7 @@ public class UserService {
             return UserResponse.from(savedUser);
         } catch (DataAccessException e) {
             log.error("회원가입 저장 실패 loginId={}: {}", request.getUserLoginId(), e.getMessage(), e);
-            throw new RuntimeException("회원 정보를 저장하는 중 오류가 발생했습니다.", e);
+            throw new RuntimeException("일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", e);
         }
     }
 

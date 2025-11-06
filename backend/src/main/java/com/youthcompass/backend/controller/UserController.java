@@ -39,7 +39,7 @@ public class UserController {
         } catch (IllegalArgumentException e) {
             throw translateIllegalArgument(e);
         } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "회원가입 처리 중 오류가 발생했습니다.", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", e);
         }
     }
 
@@ -60,7 +60,7 @@ public class UserController {
         } catch (IllegalArgumentException e) {
             throw translateIllegalArgument(e);
         } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "로그인 처리 중 오류가 발생했습니다.", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", e);
         }
     }
 
@@ -80,7 +80,7 @@ public class UserController {
         } catch (IllegalArgumentException e) {
             throw translateIllegalArgument(e);
         } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "사용자 정보 조회 중 오류가 발생했습니다.", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", e);
         }
     }
 
@@ -104,7 +104,7 @@ public class UserController {
         } catch (IllegalArgumentException e) {
             throw translateIllegalArgument(e);
         } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "사용자 정보 수정 중 오류가 발생했습니다.", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", e);
         }
     }
 

@@ -48,7 +48,7 @@ public class ChatbotController {
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
         } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "AI 메시지 처리 중 오류가 발생했습니다.", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "답변 생성 중 오류가 발생했습니다. 다시 질문해 주세요.", e);
         }
     }
 
@@ -77,11 +77,11 @@ public class ChatbotController {
                 .onErrorMap(RuntimeException.class, e ->
                     e instanceof ResponseStatusException
                         ? e
-                        : new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "AI 스트리밍 호출 중 오류가 발생했습니다.", e));
+                        : new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "답변 생성 중 오류가 발생했습니다. 다시 질문해 주세요.", e));
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
         } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "AI 스트리밍 호출 중 오류가 발생했습니다.", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "답변 생성 중 오류가 발생했습니다. 다시 질문해 주세요.", e);
         }
     }
 
@@ -105,7 +105,7 @@ public class ChatbotController {
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
         } catch (RuntimeException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "대화 기록 조회 중 오류가 발생했습니다.", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", e);
         }
     }
 }

@@ -36,9 +36,10 @@ const Index = () => {
         setRecommendedPolicies(latestFaqs);
       } catch (error) {
         console.error("Failed to load recommended policies:", error);
+        const errorMessage = error instanceof Error ? error.message : "추천 정책을 불러오는데 실패했습니다.";
         toast({
           title: "알림",
-          description: "추천 정책을 불러오는데 실패했습니다.",
+          description: errorMessage,
           variant: "default",
         });
       } finally {

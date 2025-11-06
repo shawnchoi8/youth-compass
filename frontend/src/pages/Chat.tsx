@@ -96,9 +96,10 @@ const Chat = () => {
       await loadConversations(); // 목록 새로고침
     } catch (error) {
       console.error("Failed to create conversation:", error);
+      const errorMessage = error instanceof Error ? error.message : "대화방 생성에 실패했습니다.";
       toast({
         title: "오류",
-        description: "대화방 생성에 실패했습니다.",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -137,9 +138,10 @@ const Chat = () => {
       setMessages(loadedMessages);
     } catch (error) {
       console.error("Failed to load conversation:", error);
+      const errorMessage = error instanceof Error ? error.message : "대화를 불러오는데 실패했습니다.";
       toast({
         title: "오류",
-        description: "대화를 불러오는데 실패했습니다.",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -163,9 +165,10 @@ const Chat = () => {
       });
     } catch (error) {
       console.error("Failed to delete conversation:", error);
+      const errorMessage = error instanceof Error ? error.message : "대화 삭제에 실패했습니다.";
       toast({
         title: "오류",
-        description: "대화 삭제에 실패했습니다.",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -304,9 +307,10 @@ const Chat = () => {
         (error: Error) => {
           console.error("Streaming error:", error);
           setIsLoading(false);
+          const errorMessage = error.message || "메시지 전송에 실패했습니다.";
           toast({
             title: "오류",
-            description: "메시지 전송에 실패했습니다.",
+            description: errorMessage,
             variant: "destructive",
           });
         }
@@ -314,9 +318,10 @@ const Chat = () => {
     } catch (error) {
       console.error("Failed to send message:", error);
       setIsLoading(false);
+      const errorMessage = error instanceof Error ? error.message : "메시지 전송에 실패했습니다.";
       toast({
         title: "오류",
-        description: "메시지 전송에 실패했습니다.",
+        description: errorMessage,
         variant: "destructive",
       });
     }

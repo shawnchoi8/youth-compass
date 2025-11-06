@@ -74,9 +74,10 @@ const Categories = () => {
         }
       } catch (error) {
         console.error("Failed to load categories:", error);
+        const errorMessage = error instanceof Error ? error.message : "카테고리를 불러오는데 실패했습니다.";
         toast({
           title: "오류",
-          description: "카테고리를 불러오는데 실패했습니다.",
+          description: errorMessage,
           variant: "destructive",
         });
       } finally {

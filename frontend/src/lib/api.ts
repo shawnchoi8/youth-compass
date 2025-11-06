@@ -41,8 +41,21 @@ async function apiRequest<T>(
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`API Error: ${response.status} - ${error}`);
+    let errorMessage = "알 수 없는 오류가 발생했습니다.";
+    try {
+      const errorText = await response.text();
+      // Spring의 ResponseStatusException은 JSON 형태로 에러를 반환
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.message || errorData.error || errorText;
+      } catch {
+        // JSON 파싱 실패 시 원본 텍스트 사용
+        errorMessage = errorText || errorMessage;
+      }
+    } catch {
+      // response.text() 실패 시 기본 메시지 사용
+    }
+    throw new Error(errorMessage);
   }
 
   // 204 No Content인 경우 빈 객체 반환

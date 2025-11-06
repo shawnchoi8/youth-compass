@@ -56,7 +56,7 @@ public class ConversationService {
             return ConversationResponse.from(savedConversation);
         } catch (DataAccessException e) {
             log.error("대화방 저장 실패 userId={}: {}", userId, e.getMessage(), e);
-            throw new RuntimeException("대화방을 저장하는 중 오류가 발생했습니다.", e);
+            throw new RuntimeException("일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", e);
         }
     }
 
@@ -130,7 +130,7 @@ public class ConversationService {
             messageRepository.deleteByConversationConversationId(conversationId);
         } catch (DataAccessException e) {
             log.error("대화 메시지 삭제 실패 conversationId={}: {}", conversationId, e.getMessage(), e);
-            throw new RuntimeException("대화 메시지를 삭제하는 중 오류가 발생했습니다.", e);
+            throw new RuntimeException("일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", e);
         }
 
         // 2. 그 다음 대화방 삭제
@@ -138,7 +138,7 @@ public class ConversationService {
             conversationRepository.delete(conversation);
         } catch (DataAccessException e) {
             log.error("대화방 삭제 실패 conversationId={}: {}", conversationId, e.getMessage(), e);
-            throw new RuntimeException("대화방을 삭제하는 중 오류가 발생했습니다.", e);
+            throw new RuntimeException("일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", e);
         }
     }
 }
