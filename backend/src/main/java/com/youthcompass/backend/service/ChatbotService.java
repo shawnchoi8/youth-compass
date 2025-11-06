@@ -215,35 +215,35 @@ public class ChatbotService {
 
             System.out.println("Conversation found and authorized");
 
-        // 첫 번째 메시지인 경우 대화 제목 업데이트
-        long messageCount = messageRepository.countByConversationConversationId(conversation.getConversationId());
-        if (messageCount == 0 && "새 대화".equals(conversation.getConversationTitle())) {
-            // 첫 30자까지만 제목으로 사용
-            String newTitle = request.getMessage().length() > 30
-                ? request.getMessage().substring(0, 30) + "..."
-                : request.getMessage();
-            conversation.updateTitle(newTitle);
-            try {
-                conversationRepository.save(conversation);
-            } catch (DataAccessException e) {
-                log.error("대화 제목 업데이트 실패 userId={}, conversationId={}: {}", userId, conversation.getConversationId(), e.getMessage(), e);
-                throw new RuntimeException("대화 제목을 저장하는 중 오류가 발생했습니다.", e);
+            // 첫 번째 메시지인 경우 대화 제목 업데이트
+            long messageCount = messageRepository.countByConversationConversationId(conversation.getConversationId());
+            if (messageCount == 0 && "새 대화".equals(conversation.getConversationTitle())) {
+                // 첫 30자까지만 제목으로 사용
+                String newTitle = request.getMessage().length() > 30
+                    ? request.getMessage().substring(0, 30) + "..."
+                    : request.getMessage();
+                conversation.updateTitle(newTitle);
+                try {
+                    conversationRepository.save(conversation);
+                } catch (DataAccessException e) {
+                    log.error("대화 제목 업데이트 실패 userId={}, conversationId={}: {}", userId, conversation.getConversationId(), e.getMessage(), e);
+                    throw new RuntimeException("대화 제목을 저장하는 중 오류가 발생했습니다.", e);
+                }
+                System.out.println("Updated conversation title to: " + newTitle);
             }
-            System.out.println("Updated conversation title to: " + newTitle);
-        }
 
-        // 사용자 메시지 저장
-        Message userMessage = Message.builder()
-                .conversation(conversation)
-                .messageContent(request.getMessage())
-                .messageRole(Message.MessageRole.USER)
-                .build();
-        try {
-            messageRepository.save(userMessage);
-        } catch (DataAccessException e) {
-            log.error("스트리밍 사용자 메시지 저장 실패 userId={}, conversationId={}: {}", userId, conversation.getConversationId(), e.getMessage(), e);
-            throw new RuntimeException("메시지를 저장하는 중 오류가 발생했습니다.", e);
-        }
+            // 사용자 메시지 저장
+            Message userMessage = Message.builder()
+                    .conversation(conversation)
+                    .messageContent(request.getMessage())
+                    .messageRole(Message.MessageRole.USER)
+                    .build();
+            try {
+                messageRepository.save(userMessage);
+            } catch (DataAccessException e) {
+                log.error("스트리밍 사용자 메시지 저장 실패 userId={}, conversationId={}: {}", userId, conversation.getConversationId(), e.getMessage(), e);
+                throw new RuntimeException("메시지를 저장하는 중 오류가 발생했습니다.", e);
+            }
 
             System.out.println("User message saved");
 
@@ -343,7 +343,7 @@ public class ChatbotService {
                         try {
                             messageRepository.save(aiMessage);
                         } catch (DataAccessException e) {
-                            log.error("스트리밍 AI 메시지 저장 실패 conversationId={}: {}", conversation.getConversationId(), e.getMessage(), e);
+                            log.error("스트리밍 AI 메시지 저장 실패 conversationId={}: {}", finalConversation != null ? finalConversation.getConversationId() : "null", e.getMessage(), e);
                             throw new RuntimeException("AI 응답을 저장하는 중 오류가 발생했습니다.", e);
                         }
                         transactionManager.commit(status);
@@ -354,7 +354,7 @@ public class ChatbotService {
                     } catch (Exception e) {
                         transactionManager.rollback(status);
                         System.err.println("❌ Failed to save AI response to DB: " + e.getMessage());
-                        log.error("스트리밍 AI 메시지 저장 트랜잭션 롤백 conversationId={}: {}", conversation.getConversationId(), e.getMessage(), e);
+                        log.error("스트리밍 AI 메시지 저장 트랜잭션 롤백 conversationId={}: {}", finalConversation != null ? finalConversation.getConversationId() : "null", e.getMessage(), e);
                     }
                 } else {
                     System.err.println("⚠️  No AI response to save (accumulated response is empty)");
