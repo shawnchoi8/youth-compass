@@ -10,8 +10,10 @@ import com.youthcompass.backend.repository.ConversationRepository;
 import com.youthcompass.backend.repository.MessageRepository;
 import com.youthcompass.backend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataAccessException;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -22,6 +24,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(readOnly = true)
 public class ConversationService {
 
@@ -48,9 +51,13 @@ public class ConversationService {
                 .conversationTitle(request.getConversationTitle())
                 .build();
 
-        Conversation savedConversation = conversationRepository.save(conversation);
-
-        return ConversationResponse.from(savedConversation);
+        try {
+            Conversation savedConversation = conversationRepository.save(conversation);
+            return ConversationResponse.from(savedConversation);
+        } catch (DataAccessException e) {
+            log.error("대화방 저장 실패 userId={}: {}", userId, e.getMessage(), e);
+            throw new RuntimeException("대화방을 저장하는 중 오류가 발생했습니다.", e);
+        }
     }
 
     /**
@@ -119,9 +126,19 @@ public class ConversationService {
         }
 
         // 1. 먼저 연관된 모든 메시지 삭제
-        messageRepository.deleteByConversationConversationId(conversationId);
+        try {
+            messageRepository.deleteByConversationConversationId(conversationId);
+        } catch (DataAccessException e) {
+            log.error("대화 메시지 삭제 실패 conversationId={}: {}", conversationId, e.getMessage(), e);
+            throw new RuntimeException("대화 메시지를 삭제하는 중 오류가 발생했습니다.", e);
+        }
 
         // 2. 그 다음 대화방 삭제
-        conversationRepository.delete(conversation);
+        try {
+            conversationRepository.delete(conversation);
+        } catch (DataAccessException e) {
+            log.error("대화방 삭제 실패 conversationId={}: {}", conversationId, e.getMessage(), e);
+            throw new RuntimeException("대화방을 삭제하는 중 오류가 발생했습니다.", e);
+        }
     }
 }

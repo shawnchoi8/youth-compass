@@ -7,8 +7,10 @@ import com.youthcompass.backend.dto.user.UserResponse;
 import com.youthcompass.backend.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * 사용자 관리 REST API Controller
@@ -30,8 +32,15 @@ public class UserController {
      */
     @PostMapping("/register")
     public ResponseEntity<UserResponse> register(@Valid @RequestBody UserRegisterRequest request) {
-        UserResponse response = userService.register(request);
-        return ResponseEntity.ok(response);
+        // 회원가입 과정에서 발생한 예외를 상태 코드로 전달
+        try {
+            UserResponse response = userService.register(request);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            throw translateIllegalArgument(e);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "회원가입 처리 중 오류가 발생했습니다.", e);
+        }
     }
 
     /**
@@ -43,9 +52,16 @@ public class UserController {
      */
     @PostMapping("/login")
     public ResponseEntity<UserResponse> login(@Valid @RequestBody UserLoginRequest request) {
-        UserResponse response = userService.login(request);
-        // TODO: JWT 토큰 생성 및 반환
-        return ResponseEntity.ok(response);
+        // 로그인 실패 원인을 상태 코드로 변환
+        try {
+            UserResponse response = userService.login(request);
+            // TODO: JWT 토큰 생성 및 반환
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            throw translateIllegalArgument(e);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "로그인 처리 중 오류가 발생했습니다.", e);
+        }
     }
 
     /**
@@ -57,8 +73,15 @@ public class UserController {
      */
     @GetMapping("/{userId}")
     public ResponseEntity<UserResponse> getUserInfo(@PathVariable Long userId) {
-        UserResponse response = userService.getUserInfo(userId);
-        return ResponseEntity.ok(response);
+        // 사용자 조회 실패 시 적절한 상태 코드 반환
+        try {
+            UserResponse response = userService.getUserInfo(userId);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            throw translateIllegalArgument(e);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "사용자 정보 조회 중 오류가 발생했습니다.", e);
+        }
     }
 
     /**
@@ -74,7 +97,29 @@ public class UserController {
             @PathVariable Long userId,
             @Valid @RequestBody UserUpdateRequest request
     ) {
-        UserResponse response = userService.updateUserInfo(userId, request);
-        return ResponseEntity.ok(response);
+        // 프로필 수정 실패 사유를 상태 코드로 변환
+        try {
+            UserResponse response = userService.updateUserInfo(userId, request);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            throw translateIllegalArgument(e);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "사용자 정보 수정 중 오류가 발생했습니다.", e);
+        }
+    }
+
+    // IllegalArgumentException을 상황별 HTTP 상태 코드로 변환해 일관된 응답을 보장
+    private ResponseStatusException translateIllegalArgument(IllegalArgumentException e) {
+        String message = e.getMessage();
+        if ("이미 존재하는 로그인 ID입니다.".equals(message)) {
+            return new ResponseStatusException(HttpStatus.CONFLICT, message, e);
+        }
+        if ("아이디 또는 비밀번호가 일치하지 않습니다.".equals(message)) {
+            return new ResponseStatusException(HttpStatus.UNAUTHORIZED, message, e);
+        }
+        if ("사용자를 찾을 수 없습니다.".equals(message)) {
+            return new ResponseStatusException(HttpStatus.NOT_FOUND, message, e);
+        }
+        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message, e);
     }
 }
