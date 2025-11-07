@@ -20,7 +20,7 @@ const ChatMessage = ({ role, content, timestamp, sources }: ChatMessageProps) =>
 
   return (
     <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
-      <Avatar className={`w-8 h-8 shrink-0 ${isUser ? "bg-muted" : "bg-primary"}`}>
+      <Avatar className={`w-8 h-8 shrink-0 items-center justify-center ${isUser ? "bg-muted" : "bg-primary"}`}>
         {isUser ? (
           <User className="w-5 h-5 text-muted-foreground" />
         ) : (
